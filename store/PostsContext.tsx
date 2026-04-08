@@ -91,6 +91,7 @@ type PostsContextType = {
   posts: Post[];
   addComment: (postId: string, text: string) => void;
   setVote: (postId: string, newVoteStatus: 'none' | 'up' | 'down') => void;
+  updateAuthorName: (oldName: string, newName: string) => void;
 };
 
 const PostsContext = createContext<PostsContextType | undefined>(undefined);
@@ -134,8 +135,22 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }));
   };
 
+  const updateAuthorName = (oldName: string, newName: string) => {
+    if (oldName === newName) return;
+    setPosts(prev => prev.map(post => {
+      const updatedComments = post.comments.map(c =>
+        c.author === oldName ? { ...c, author: newName } : c
+      );
+      return {
+        ...post,
+        author: post.author === oldName ? newName : post.author,
+        comments: updatedComments,
+      };
+    }));
+  };
+
   return (
-    <PostsContext.Provider value={{ posts, addComment, setVote }}>
+    <PostsContext.Provider value={{ posts, addComment, setVote, updateAuthorName }}>
       {children}
     </PostsContext.Provider>
   );

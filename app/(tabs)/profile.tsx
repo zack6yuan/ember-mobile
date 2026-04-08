@@ -1,32 +1,48 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Switch, FlatList } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Switch, FlatList, ActivityIndicator } from 'react-native';
 import { Text } from '@/components/Text';
 import { useTheme } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Appearance } from 'react-native';
 import { PostCard } from '@/components/PostCard';
 import { usePosts } from '@/store/PostsContext';
+import { useUser } from '@/store/UserContext';
+import { useRouter } from 'expo-router';
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
   const [isDark, setIsDark] = useState(Appearance.getColorScheme() === 'dark');
   const { posts } = usePosts();
+  const { userProfile, isLoading } = useUser();
 
   const toggleDarkMode = (value: boolean) => {
     setIsDark(value);
     Appearance.setColorScheme(value ? 'dark' : 'light');
   };
 
-  const profilePosts = posts.filter(p => p.author === 'CodeBlueVeteran');
+  const profilePosts = posts.filter(p => p.author === userProfile.username);
 
   const renderHeader = () => (
     <View style={[styles.headerContainer, { borderBottomColor: colors.border }]}>
       <View style={styles.profileInfo}>
-        <View style={styles.avatarPlaceholder}>
-          <Text style={styles.avatarText}>C</Text>
-        </View>
-        <Text style={[styles.username, { color: colors.text }]}>CodeBlueVeteran</Text>
-        <Text style={styles.bio}>Registered Nurse | ER | Coffee Addict</Text>
+        {isLoading ? (
+          <ActivityIndicator size="large" style={{ marginVertical: 40 }} />
+        ) : (
+          <>
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarText}>{userProfile.avatarInitial}</Text>
+            </View>
+            <Text style={[styles.username, { color: colors.text }]}>{userProfile.username}</Text>
+            {userProfile.name ? (
+              <Text style={[styles.nameText, { color: colors.text }]}>{userProfile.name}</Text>
+            ) : null}
+            <Text style={styles.bio}>{userProfile.bio}</Text>
+            {userProfile.location ? (
+              <Text style={styles.locationText}>📍 {userProfile.location}</Text>
+            ) : null}
+          </>
+        )}
         
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
@@ -42,7 +58,10 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.actionsContainer}>
-        <TouchableOpacity style={styles.editButton}>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => router.push('/edit-profile')}
+        >
           <Text style={styles.editButtonText}>Edit Profile</Text>
         </TouchableOpacity>
         
@@ -82,8 +101,10 @@ const styles = StyleSheet.create({
   profileInfo: { alignItems: 'center', marginBottom: 20 },
   avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FF3B30', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   avatarText: { fontSize: 32, color: '#fff', fontWeight: 'bold' },
-  username: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
-  bio: { fontSize: 14, color: '#666', marginBottom: 16 },
+  username: { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
+  nameText: { fontSize: 15, opacity: 0.6, marginBottom: 4 },
+  bio: { fontSize: 14, color: '#666', marginBottom: 8 },
+  locationText: { fontSize: 13, color: '#888', marginBottom: 16 },
   statsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 12, padding: 12, width: '100%' },
   statItem: { alignItems: 'center', paddingHorizontal: 20 },
   statValue: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
