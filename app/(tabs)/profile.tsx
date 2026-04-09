@@ -8,6 +8,7 @@ import { PostCard } from '@/components/PostCard';
 import { usePosts } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
@@ -15,6 +16,7 @@ export default function ProfileScreen() {
   const [isDark, setIsDark] = useState(Appearance.getColorScheme() === 'dark');
   const { posts } = usePosts();
   const { userProfile, isLoading } = useUser();
+  const insets = useSafeAreaInsets();
 
   const toggleDarkMode = (value: boolean) => {
     setIsDark(value);
@@ -81,7 +83,7 @@ export default function ProfileScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <FlatList
         data={profilePosts}
         contentContainerStyle={{ paddingBottom: 150 }}

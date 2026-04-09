@@ -4,6 +4,7 @@ import { useTheme } from '@react-navigation/native';
 import { Text } from '@/components/Text';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const CATEGORIES = ['Question', 'Venting', 'Support', 'Humor', 'Success'];
 
@@ -13,6 +14,7 @@ export default function PostScreen() {
   const [category, setCategory] = useState('');
   const { colors } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const getCategoryColor = (cat: string) => {
     switch (cat?.toLowerCase()) {
@@ -34,7 +36,7 @@ export default function PostScreen() {
 
   return (
     <KeyboardAvoidingView 
-      style={[styles.container, { backgroundColor: colors.background }]} 
+      style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >

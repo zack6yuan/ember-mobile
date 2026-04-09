@@ -21,24 +21,28 @@ export default function TabLayout() {
         name="communities"
         options={{
           title: 'Explore',
+          headerShown: false,
         }}
       />
       <Tabs.Screen
         name="post"
         options={{
           title: 'Post',
+          headerShown: false,
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
           title: 'Alerts',
+          headerShown: false,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
+          headerShown: false,
         }}
       />
     </Tabs>

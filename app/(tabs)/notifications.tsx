@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-
 import { Text } from '@/components/Text';
 import { useTheme } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const INITIAL_NOTIFICATIONS = [
   { id: '1', type: 'upvote', user: null, text: 'Someone upvoted your post "Tips for surviving..."', time: '10m ago', unread: true },
@@ -18,6 +19,7 @@ export default function NotificationsScreen() {
   const { colors } = useTheme();
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [activeFilter, setActiveFilter] = useState('All');
+  const insets = useSafeAreaInsets();
 
   const getIconData = (type: string) => {
     switch(type) {
@@ -70,7 +72,7 @@ export default function NotificationsScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <FlatList
         data={filteredNotifications}
         keyExtractor={(item) => item.id}

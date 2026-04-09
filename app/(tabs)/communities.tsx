@@ -4,6 +4,7 @@ import { Text } from '@/components/Text';
 import { useTheme } from '@react-navigation/native';
 import { CommunityCard } from '@/components/CommunityCard';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DUMMY_COMMUNITIES = [
   { id: '1', name: 'ERNurses', members: 45000, category: 'Critical Care', description: 'For emergency room nurses to share stories and advice.' },
@@ -24,6 +25,7 @@ export default function CommunitiesScreen() {
   const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
+  const insets = useSafeAreaInsets();
 
   const filteredCommunities = DUMMY_COMMUNITIES.filter(comm => {
     const matchesSearch = comm.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -38,7 +40,7 @@ export default function CommunitiesScreen() {
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <View style={[styles.headerContainer, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <Text style={[styles.headerText, { color: colors.text }]}>Explore Communities</Text>
         <View style={[styles.searchBar, { backgroundColor: colors.background, borderColor: colors.border }]}>
