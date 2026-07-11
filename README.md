@@ -1,3 +1,3 @@
-# scrubs-mobile
-Scrubs Mobile App
+# ember-mobile
+Ember Mobile App
 
