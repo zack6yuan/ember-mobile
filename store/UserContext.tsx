@@ -1,86 +1,90 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import type { Identity, IdentityMode } from '@/store/PostsContext';
 
-export type UserProfile = {
-  name: string;
-  username: string;
-  bio: string;
-  location: string;
-  avatarInitial: string;
+/**
+ * The signed-in person. In Ember every post can be shared anonymously or under a
+ * username — this store holds the account handle plus the *default* identity mode
+ * chosen during onboarding (overridable on any post).
+ */
+export type Session = {
+  handle: string; // account username, e.g. "mia_r"
+  defaultMode: IdentityMode; // default from onboarding
+  memberSince: string; // display string, e.g. "March"
+  embersShared: number;
 };
 
-const DEFAULT_PROFILE: UserProfile = {
-  name: 'Code Blue Veteran',
-  username: 'CodeBlueVeteran',
-  bio: 'Registered Nurse | ER | Coffee Addict',
-  location: '',
-  avatarInitial: 'C',
+const DEFAULT_SESSION: Session = {
+  handle: 'mia_r',
+  defaultMode: 'anonymous',
+  memberSince: 'March',
+  embersShared: 41,
 };
 
-const USER_DOC_PATH = 'users/default';
+const SESSION_DOC_PATH = 'sessions/default';
 
 type UserContextType = {
-  userProfile: UserProfile;
-  updateProfile: (fields: Partial<UserProfile>) => Promise<void>;
+  session: Session;
+  /** The identity to pre-select when composing, derived from the default mode. */
+  defaultIdentity: Identity;
+  /** Build a named identity for this account (used by the segmented control). */
+  namedIdentity: Identity;
+  anonIdentity: Identity;
+  setDefaultMode: (mode: IdentityMode) => Promise<void>;
   isLoading: boolean;
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [session, setSession] = useState<Session>(DEFAULT_SESSION);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadProfile();
+    loadSession();
   }, []);
 
-  const loadProfile = async () => {
+  const loadSession = async () => {
     try {
-      const docRef = doc(db, USER_DOC_PATH);
-      const snapshot = await getDoc(docRef);
+      const ref = doc(db, SESSION_DOC_PATH);
+      const snapshot = await getDoc(ref);
       if (snapshot.exists()) {
-        const data = snapshot.data() as Partial<UserProfile>;
-        setUserProfile({
-          name: data.name || DEFAULT_PROFILE.name,
-          username: data.username || DEFAULT_PROFILE.username,
-          bio: data.bio || DEFAULT_PROFILE.bio,
-          location: data.location || DEFAULT_PROFILE.location,
-          avatarInitial: data.avatarInitial || (data.username?.charAt(0).toUpperCase() ?? DEFAULT_PROFILE.avatarInitial),
+        const data = snapshot.data() as Partial<Session>;
+        setSession({
+          handle: data.handle || DEFAULT_SESSION.handle,
+          defaultMode: data.defaultMode || DEFAULT_SESSION.defaultMode,
+          memberSince: data.memberSince || DEFAULT_SESSION.memberSince,
+          embersShared: data.embersShared ?? DEFAULT_SESSION.embersShared,
         });
       } else {
-        // First load — seed Firestore with defaults
-        await setDoc(docRef, DEFAULT_PROFILE);
+        await setDoc(ref, DEFAULT_SESSION);
       }
     } catch (error) {
-      console.warn('Failed to load profile from Firestore, using defaults:', error);
+      console.warn('Failed to load session from Firestore, using defaults:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateProfile = async (fields: Partial<UserProfile>) => {
-    const updated = { ...userProfile, ...fields };
-
-    // Auto-derive avatar initial from first character of username
-    if (fields.username) {
-      updated.avatarInitial = fields.username.charAt(0).toUpperCase();
-    }
-
-    setUserProfile(updated);
-
+  const setDefaultMode = async (mode: IdentityMode) => {
+    const updated = { ...session, defaultMode: mode };
+    setSession(updated);
     try {
-      const docRef = doc(db, USER_DOC_PATH);
-      await setDoc(docRef, updated, { merge: true });
+      await setDoc(doc(db, SESSION_DOC_PATH), updated, { merge: true });
     } catch (error) {
-      console.error('Failed to save profile to Firestore:', error);
-      throw error;
+      console.warn('Failed to persist default identity:', error);
     }
   };
 
+  const anonIdentity: Identity = { mode: 'anonymous' };
+  const namedIdentity: Identity = { mode: 'named', handle: session.handle };
+  const defaultIdentity: Identity = session.defaultMode === 'named' ? namedIdentity : anonIdentity;
+
   return (
-    <UserContext.Provider value={{ userProfile, updateProfile, isLoading }}>
+    <UserContext.Provider
+      value={{ session, defaultIdentity, namedIdentity, anonIdentity, setDefaultMode, isLoading }}
+    >
       {children}
     </UserContext.Provider>
   );

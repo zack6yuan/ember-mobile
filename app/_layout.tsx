@@ -1,29 +1,36 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { ThemeProvider } from '@react-navigation/native';
 import { Stack, SplashScreen } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { useFonts } from 'expo-font';
-import { Outfit_400Regular, Outfit_500Medium, Outfit_700Bold } from '@expo-google-fonts/outfit';
-import { DynaPuff_700Bold } from '@expo-google-fonts/dynapuff';
+import {
+  Newsreader_400Regular,
+  Newsreader_500Medium,
+  Newsreader_500Medium_Italic,
+} from '@expo-google-fonts/newsreader';
+import {
+  HankenGrotesk_400Regular,
+  HankenGrotesk_500Medium,
+  HankenGrotesk_600SemiBold,
+  HankenGrotesk_700Bold,
+} from '@expo-google-fonts/hanken-grotesk';
+
 import { PostsProvider } from '@/store/PostsContext';
 import { UserProvider } from '@/store/UserContext';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Ember, EmberNavTheme } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
-
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded, error] = useFonts({
-    Outfit_400Regular,
-    Outfit_500Medium,
-    Outfit_700Bold,
-    DynaPuff_700Bold,
+    Newsreader_400Regular,
+    Newsreader_500Medium,
+    Newsreader_500Medium_Italic,
+    HankenGrotesk_400Regular,
+    HankenGrotesk_500Medium,
+    HankenGrotesk_600SemiBold,
+    HankenGrotesk_700Bold,
   });
 
   useEffect(() => {
@@ -37,18 +44,25 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={EmberNavTheme}>
       <UserProvider>
         <PostsProvider>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="post/[id]" options={{ title: 'Post details', headerBackTitle: 'Back' }} />
-            <Stack.Screen name="edit-profile" options={{ presentation: 'modal', headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: Ember.bg },
+            }}
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="post/[id]" />
+            <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="posted" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
           </Stack>
         </PostsProvider>
       </UserProvider>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }

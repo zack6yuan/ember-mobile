@@ -1,156 +1,245 @@
 import React, { createContext, useContext, useState } from 'react';
 
-export type Comment = {
+export type IdentityMode = 'anonymous' | 'named';
+export type Identity = { mode: IdentityMode; handle?: string };
+
+export type TagId = 'venting' | 'wins' | 'advice' | 'gratitude' | 'latenight';
+
+export type Reply = {
   id: string;
-  author: string;
-  time: string;
-  text: string;
+  author: Identity;
+  body: string;
+  createdAt: string; // display string, e.g. "2m"
 };
 
 export type Post = {
   id: string;
-  author: string;
-  time: string;
-  title: string;
+  author: Identity;
+  tag: TagId;
   body: string;
-  upvotes: number;
-  category: string;
-  comments: Comment[];
-  voteStatus?: 'none' | 'up' | 'down';
+  hugs: number;
+  hearts: number;
+  replies: Reply[];
+  createdAt: string; // display string, e.g. "4m"
+  mine?: boolean; // authored by the current user (shown in their profile)
+  saved?: boolean;
+  myHug?: boolean;
+  myHeart?: boolean;
 };
+
+export type Community = {
+  tag: TagId;
+  emoji: string;
+  name: string; // e.g. "#venting"
+  description: string;
+  count: number; // people here right now
+};
+
+export const COMMUNITIES: Community[] = [
+  { tag: 'venting', emoji: '💨', name: '#venting', description: 'Get it off your chest', count: 218 },
+  { tag: 'wins', emoji: '🎉', name: '#wins', description: 'Celebrate the small stuff', count: 96 },
+  { tag: 'advice', emoji: '💬', name: '#advice', description: 'Ask, and be heard', count: 143 },
+  { tag: 'gratitude', emoji: '🕯️', name: '#gratitude', description: 'Notice the good', count: 74 },
+  { tag: 'latenight', emoji: '🌙', name: '#latenight', description: 'For the 3am thoughts', count: 51 },
+];
+
+export const TAG_ORDER: TagId[] = ['venting', 'wins', 'advice', 'gratitude', 'latenight'];
+
+const anon = (): Identity => ({ mode: 'anonymous' });
+const named = (handle: string): Identity => ({ mode: 'named', handle });
 
 const INITIAL_POSTS: Post[] = [
   {
     id: '1',
-    author: 'CodeBlueVeteran',
-    time: '2h ago',
-    title: 'Tips for surviving your first week in the ER?',
-    body: 'Just started my orientation in the ER and feeling a bit overwhelmed. What are your best tips for staying organized when you have multiple critical patients?',
-    upvotes: 245,
-    category: 'question',
-    comments: [
-      { id: 'c1', author: 'NurseRatched', time: '1h ago', text: 'I totally agree with this!' },
-      { id: 'c2', author: 'IV_League', time: '45m ago', text: 'Happens all the time on our floor too. Hang in there!' },
+    author: anon(),
+    tag: 'venting',
+    body: "Third night I can't sleep. Feels like everyone moved on with their lives and I'm just… stuck.",
+    hugs: 34,
+    hearts: 12,
+    createdAt: '4m',
+    mine: true, // the current user posted this anonymously (visible in their profile)
+    replies: [
+      { id: 'r1', author: anon(), body: 'Stuck is still a place you can leave. Been there. It gets lighter.', createdAt: '2m' },
+      { id: 'r2', author: named('leo'), body: "Sitting with you tonight. You're not as behind as it feels. 🕯️", createdAt: '1m' },
+      { id: 'r3', author: anon(), body: 'The 3am hours lie to you. Morning always has a different opinion.', createdAt: '1m' },
     ],
   },
   {
     id: '2',
-    author: 'NightShiftNinja',
-    time: '4h ago',
-    title: 'Short-staffed again tonight...',
-    body: 'We are down two nurses and the unit is completely full. I know we can get through this, but I am so exhausted. Just needed to let that out.',
-    upvotes: 412,
-    category: 'venting',
-    comments: [],
+    author: named('mia_r'),
+    tag: 'wins',
+    body: "Finally sent the email I'd been dreading for a month. Hands were shaking but I did it 🎉",
+    hugs: 8,
+    hearts: 51,
+    createdAt: '20m',
+    mine: true,
+    replies: [
+      { id: 'r4', author: anon(), body: 'That first send is the hardest part. Proud of you.', createdAt: '12m' },
+      { id: 'r5', author: named('sam'), body: 'Shaking hands still hit send. That’s courage. 🎉', createdAt: '8m' },
+    ],
   },
   {
     id: '3',
-    author: 'CompassionFatigue',
-    time: '6h ago',
-    title: 'Lost my first patient today.',
-    body: 'I knew it was coming, but it still hit me much harder than I expected. How do you all cope with the grief while still caring for your other patients?',
-    upvotes: 890,
-    category: 'support',
-    comments: [
-      { id: 'c3', author: 'TravelRN101', time: '3h ago', text: 'It never gets easy, but you learn to process it. Sending hugs.' }
+    author: named('jaylen'),
+    tag: 'venting',
+    body: "Burnt out and pretending I'm fine at work. Anyone else running on empty?",
+    hugs: 40,
+    hearts: 23,
+    createdAt: '18m',
+    replies: [
+      { id: 'r6', author: anon(), body: 'Running on empty here too. You’re not alone in it.', createdAt: '10m' },
     ],
   },
   {
     id: '4',
-    author: 'StudentNurse99',
-    time: '8h ago',
-    title: 'Just passed my NCLEX in 75 questions!',
-    body: 'I can finally say I am officially a Registered Nurse! After years of studying and clinicals, all the hard work paid off. Thanks everyone for the study guides!',
-    upvotes: 1205,
-    category: 'success',
-    comments: [],
+    author: anon(),
+    tag: 'gratitude',
+    body: 'A stranger paid for my coffee today and I nearly cried. Small things are keeping me going.',
+    hugs: 12,
+    hearts: 88,
+    createdAt: '1h',
+    replies: [],
   },
   {
     id: '5',
-    author: 'ScrubLife',
-    time: '12h ago',
-    title: 'When the patient says they have a high pain tolerance...',
-    body: '...but cries when you take the tape off their IV. We’ve all been there! 🤣',
-    upvotes: 560,
-    category: 'humor',
-    comments: [],
+    author: named('priya'),
+    tag: 'advice',
+    body: "How do you tell a friend you need space without hurting them? I love them but I'm drowning.",
+    hugs: 6,
+    hearts: 14,
+    createdAt: '2h',
+    replies: [
+      { id: 'r7', author: anon(), body: 'Honesty wrapped in care. “I love you and I need a little quiet” is enough.', createdAt: '1h' },
+    ],
   },
   {
     id: '6',
-    author: 'TravelRN101',
-    time: '1d ago',
-    title: 'Best scrub brands for 12-hour shifts? 🩺',
-    body: 'I am looking for something that is breathable but has at least 5 pockets. Any recommendations?',
-    upvotes: 189,
-    category: 'question',
-    comments: [],
+    author: anon(),
+    tag: 'latenight',
+    body: "It's 3am and my brain won't stop rewriting conversations from years ago. Anyone up?",
+    hugs: 29,
+    hearts: 9,
+    createdAt: '3h',
+    replies: [],
+  },
+  {
+    id: '7',
+    author: named('noor'),
+    tag: 'wins',
+    body: 'Six months sober today. Told no one in my life yet, so I’m telling you first. 🕯️',
+    hugs: 21,
+    hearts: 140,
+    createdAt: '5h',
+    replies: [
+      { id: 'r8', author: anon(), body: 'Six months is enormous. Thank you for trusting us with it.', createdAt: '4h' },
+    ],
   },
 ];
 
+type NewPostInput = { body: string; tag: TagId; identity: Identity };
+
 type PostsContextType = {
   posts: Post[];
-  addComment: (postId: string, text: string) => void;
-  setVote: (postId: string, newVoteStatus: 'none' | 'up' | 'down') => void;
-  updateAuthorName: (oldName: string, newName: string) => void;
+  communities: Community[];
+  activeTag: TagId;
+  setActiveTag: (tag: TagId) => void;
+  getPost: (id: string) => Post | undefined;
+  postsByTag: (tag: TagId) => Post[];
+  myPosts: () => Post[];
+  savedPosts: () => Post[];
+  toggleHug: (id: string) => void;
+  toggleHeart: (id: string) => void;
+  toggleSave: (id: string) => void;
+  addReply: (postId: string, body: string, identity: Identity) => void;
+  addPost: (input: NewPostInput) => string;
 };
 
 const PostsContext = createContext<PostsContextType | undefined>(undefined);
 
 export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
+  const [activeTag, setActiveTag] = useState<TagId>('venting');
 
-  const addComment = (postId: string, text: string) => {
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        return {
-          ...post,
-          comments: [...post.comments, {
-            id: Math.random().toString(),
-            author: 'You',
-            time: 'Just now',
-            text
-          }]
-        };
-      }
-      return post;
-    }));
+  const getPost = (id: string) => posts.find((p) => p.id === id);
+  const postsByTag = (tag: TagId) => posts.filter((p) => p.tag === tag);
+  const myPosts = () => posts.filter((p) => p.mine);
+  const savedPosts = () => posts.filter((p) => p.saved);
+
+  const toggleHug = (id: string) => {
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const on = !p.myHug;
+        return { ...p, myHug: on, hugs: p.hugs + (on ? 1 : -1) };
+      })
+    );
   };
 
-  const setVote = (postId: string, newVoteStatus: 'none' | 'up' | 'down') => {
-    setPosts(prev => prev.map(post => {
-      if (post.id === postId) {
-        const currentStatus = post.voteStatus || 'none';
-        if (currentStatus === newVoteStatus) return post;
-        
-        let diff = 0;
-        if (currentStatus === 'up') diff -= 1;
-        else if (currentStatus === 'down') diff += 1;
-        
-        if (newVoteStatus === 'up') diff += 1;
-        else if (newVoteStatus === 'down') diff -= 1;
-        
-        return { ...post, upvotes: post.upvotes + diff, voteStatus: newVoteStatus };
-      }
-      return post;
-    }));
+  const toggleHeart = (id: string) => {
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const on = !p.myHeart;
+        return { ...p, myHeart: on, hearts: p.hearts + (on ? 1 : -1) };
+      })
+    );
   };
 
-  const updateAuthorName = (oldName: string, newName: string) => {
-    if (oldName === newName) return;
-    setPosts(prev => prev.map(post => {
-      const updatedComments = post.comments.map(c =>
-        c.author === oldName ? { ...c, author: newName } : c
-      );
-      return {
-        ...post,
-        author: post.author === oldName ? newName : post.author,
-        comments: updatedComments,
-      };
-    }));
+  const toggleSave = (id: string) => {
+    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, saved: !p.saved } : p)));
+  };
+
+  const addReply = (postId: string, body: string, identity: Identity) => {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? {
+              ...p,
+              replies: [
+                ...p.replies,
+                { id: `r_${Date.now()}`, author: identity, body, createdAt: 'now' },
+              ],
+            }
+          : p
+      )
+    );
+  };
+
+  const addPost = ({ body, tag, identity }: NewPostInput) => {
+    const id = `p_${Date.now()}`;
+    const post: Post = {
+      id,
+      author: identity,
+      tag,
+      body,
+      hugs: 0,
+      hearts: 0,
+      replies: [],
+      createdAt: 'now',
+      mine: true,
+    };
+    setPosts((prev) => [post, ...prev]);
+    return id;
   };
 
   return (
-    <PostsContext.Provider value={{ posts, addComment, setVote, updateAuthorName }}>
+    <PostsContext.Provider
+      value={{
+        posts,
+        communities: COMMUNITIES,
+        activeTag,
+        setActiveTag,
+        getPost,
+        postsByTag,
+        myPosts,
+        savedPosts,
+        toggleHug,
+        toggleHeart,
+        toggleSave,
+        addReply,
+        addPost,
+      }}
+    >
       {children}
     </PostsContext.Provider>
   );
@@ -158,6 +247,6 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 export const usePosts = () => {
   const context = useContext(PostsContext);
-  if (!context) throw new Error("usePosts must be used within a PostsProvider");
+  if (!context) throw new Error('usePosts must be used within a PostsProvider');
   return context;
 };

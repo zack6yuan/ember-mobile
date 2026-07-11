@@ -1,122 +1,124 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Switch, FlatList, ActivityIndicator } from 'react-native';
-import { Text } from '@/components/Text';
-import { useTheme } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
-import { Appearance } from 'react-native';
-import { PostCard } from '@/components/PostCard';
-import { usePosts } from '@/store/PostsContext';
-import { useUser } from '@/store/UserContext';
+import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/Text';
+import { Ember, EmberGradient, Radius } from '@/constants/theme';
+import { usePosts, type Post } from '@/store/PostsContext';
+import { useUser } from '@/store/UserContext';
+
+function sharedAs(post: Post): string {
+  return post.author.mode === 'named' && post.author.handle
+    ? `shared as @${post.author.handle}`
+    : '🌙 anonymous';
+}
+
+function MyPostCard({ post, onPress }: { post: Post; onPress: () => void }) {
+  return (
+    <TouchableOpacity activeOpacity={0.85} style={styles.postCard} onPress={onPress}>
+      <View style={styles.postMeta}>
+        <Text style={styles.postTag}>#{post.tag}</Text>
+        <Text style={styles.postShared}>· {sharedAs(post)}</Text>
+      </View>
+      <Text style={styles.postBody}>{post.body}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function ProfileScreen() {
-  const { colors } = useTheme();
-  const router = useRouter();
-  const [isDark, setIsDark] = useState(Appearance.getColorScheme() === 'dark');
-  const { posts } = usePosts();
-  const { userProfile, isLoading } = useUser();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { session } = useUser();
+  const { myPosts, savedPosts } = usePosts();
+  const [tab, setTab] = useState<'mine' | 'saved'>('mine');
 
-  const toggleDarkMode = (value: boolean) => {
-    setIsDark(value);
-    Appearance.setColorScheme(value ? 'dark' : 'light');
-  };
+  const data = tab === 'mine' ? myPosts() : savedPosts();
+  const initial = session.handle.charAt(0).toUpperCase();
 
-  const profilePosts = posts.filter(p => p.author === userProfile.username);
-
-  const renderHeader = () => (
-    <View style={[styles.headerContainer, { borderBottomColor: colors.border }]}>
-      <View style={styles.profileInfo}>
-        {isLoading ? (
-          <ActivityIndicator size="large" style={{ marginVertical: 40 }} />
-        ) : (
-          <>
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>{userProfile.avatarInitial}</Text>
-            </View>
-            <Text style={[styles.username, { color: colors.text }]}>{userProfile.username}</Text>
-            {userProfile.name ? (
-              <Text style={[styles.nameText, { color: colors.text }]}>{userProfile.name}</Text>
-            ) : null}
-            <Text style={styles.bio}>{userProfile.bio}</Text>
-            {userProfile.location ? (
-              <Text style={styles.locationText}>📍 {userProfile.location}</Text>
-            ) : null}
-          </>
-        )}
-        
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: colors.text }]}>1,204</Text>
-            <Text style={styles.statLabel}>Followers</Text>
-          </View>
-          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: colors.text }]}>342</Text>
-            <Text style={styles.statLabel}>Following</Text>
-          </View>
-        </View>
+  const header = (
+    <View>
+      <View style={styles.identity}>
+        <LinearGradient colors={EmberGradient} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={styles.avatar}>
+          <Text style={styles.avatarInitial}>{initial}</Text>
+        </LinearGradient>
+        <Text serif style={styles.handle}>
+          @{session.handle}
+        </Text>
+        <Text style={styles.meta}>
+          Here since {session.memberSince} · {session.embersShared} embers shared
+        </Text>
       </View>
 
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => router.push('/edit-profile')}
-        >
-          <Text style={styles.editButtonText}>Edit Profile</Text>
+      <View style={styles.tabs}>
+        <TouchableOpacity style={[styles.tab, tab === 'mine' && styles.tabActive]} onPress={() => setTab('mine')} activeOpacity={0.8}>
+          <Text style={[styles.tabText, tab === 'mine' ? styles.tabTextActive : styles.tabTextIdle]}>My posts</Text>
         </TouchableOpacity>
-        
-        <View style={[styles.settingRow, { backgroundColor: colors.card }]}>
-          <Ionicons name="moon" size={20} color={colors.text} style={styles.settingIcon} />
-          <Text style={[styles.settingText, { color: colors.text }]}>Dark Mode</Text>
-          <Switch 
-            value={isDark} 
-            onValueChange={toggleDarkMode}
-            trackColor={{ false: '#767577', true: '#34C759' }}
-          />
-        </View>
+        <TouchableOpacity style={[styles.tab, tab === 'saved' && styles.tabActive]} onPress={() => setTab('saved')} activeOpacity={0.8}>
+          <Text style={[styles.tabText, tab === 'saved' ? styles.tabTextActive : styles.tabTextIdle]}>Saved</Text>
+        </TouchableOpacity>
       </View>
-      
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Posts</Text>
     </View>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <FlatList
-        data={profilePosts}
-        contentContainerStyle={{ paddingBottom: 150 }}
+        data={data}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={header}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         renderItem={({ item }) => (
-          <PostCard id={item.id} />
+          <MyPostCard post={item} onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id } })} />
         )}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            {tab === 'saved' ? 'Nothing saved yet. Tap “save” on a post that stays with you.' : 'No posts yet.'}
+          </Text>
+        }
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  headerContainer: { padding: 20, borderBottomWidth: StyleSheet.hairlineWidth },
-  profileInfo: { alignItems: 'center', marginBottom: 20 },
-  avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FF3B30', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  avatarText: { fontSize: 32, color: '#fff', fontWeight: 'bold' },
-  username: { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
-  nameText: { fontSize: 15, opacity: 0.6, marginBottom: 4 },
-  bio: { fontSize: 14, color: '#666', marginBottom: 8 },
-  locationText: { fontSize: 13, color: '#888', marginBottom: 16 },
-  statsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 12, padding: 12, width: '100%' },
-  statItem: { alignItems: 'center', paddingHorizontal: 20 },
-  statValue: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  statLabel: { fontSize: 12, color: '#888' },
-  statDivider: { width: 1, height: 30 },
-  actionsContainer: { width: '100%', marginBottom: 20 },
-  editButton: { backgroundColor: '#007AFF', padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
-  editButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  settingRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12 },
-  settingIcon: { marginRight: 12 },
-  settingText: { flex: 1, fontSize: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginTop: 10 }
+  container: { flex: 1, backgroundColor: Ember.bg },
+  list: { paddingHorizontal: 18, paddingBottom: 170 },
+  identity: { alignItems: 'center', paddingTop: 16, paddingBottom: 10 },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: Radius.tile,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: '#f07828',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 18,
+  },
+  avatarInitial: { color: Ember.onGradient, fontSize: 28, fontWeight: '700' },
+  handle: { fontSize: 22, color: Ember.textPrimary },
+  meta: { color: Ember.textMutedDeep, fontSize: 13, marginTop: 4 },
+  tabs: { flexDirection: 'row', gap: 8, paddingVertical: 12 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: Radius.segment },
+  tabActive: { backgroundColor: Ember.surface3 },
+  tabText: { fontSize: 13 },
+  tabTextActive: { color: Ember.textPrimary, fontWeight: '700' },
+  tabTextIdle: { color: Ember.textMuted, fontWeight: '600' },
+  postCard: {
+    backgroundColor: Ember.surface,
+    borderWidth: 1,
+    borderColor: Ember.border,
+    borderRadius: Radius.cardSmall,
+    padding: 14,
+  },
+  postMeta: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 7 },
+  postTag: { color: Ember.ember, fontSize: 11, fontWeight: '700' },
+  postShared: { color: Ember.textMutedDeep, fontSize: 11 },
+  postBody: { color: Ember.textBody, fontSize: 13, lineHeight: 20 },
+  empty: { color: Ember.textMuted, fontSize: 14, lineHeight: 22, textAlign: 'center', paddingTop: 40, paddingHorizontal: 20 },
 });

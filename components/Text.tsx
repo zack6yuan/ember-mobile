@@ -1,26 +1,42 @@
 import React from 'react';
 import { Text as NativeText, TextProps, StyleSheet } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { Ember, Fonts } from '@/constants/theme';
 
-export function Text(props: TextProps) {
-  const { style, ...rest } = props;
-  const { colors } = useTheme();
+type Props = TextProps & {
+  /** Use the Newsreader serif face (for headlines / literary body). */
+  serif?: boolean;
+  /** Italic accent — pairs with `serif` for the headline accent word. */
+  italic?: boolean;
+};
 
-  // Extract font weight from styles to map to correct Outfit variant
-  let fontFamily = 'Outfit_400Regular';
-  const flattenedStyle = StyleSheet.flatten(style);
-  
-  if (flattenedStyle?.fontWeight === 'bold' || flattenedStyle?.fontWeight === '700' || flattenedStyle?.fontWeight === '800' || flattenedStyle?.fontWeight === '900') {
-    fontFamily = 'Outfit_700Bold';
-  } else if (flattenedStyle?.fontWeight === '500' || flattenedStyle?.fontWeight === '600') {
-    fontFamily = 'Outfit_500Medium';
+/**
+ * App text primitive. Defaults to Hanken Grotesk (body/UI) and maps the
+ * `fontWeight` style to the matching bundled weight, since custom fonts carry
+ * their own weight geometry. Pass `serif` to switch to Newsreader for headlines.
+ */
+export function Text({ style, serif, italic, ...rest }: Props) {
+  const flat = StyleSheet.flatten(style) || ({} as any);
+  const weight = flat.fontWeight;
+
+  let fontFamily: string;
+  if (serif) {
+    if (italic) fontFamily = Fonts.serifItalic;
+    else if (weight === '400' || weight === 'normal') fontFamily = Fonts.serifRegular;
+    else fontFamily = Fonts.serif;
+  } else if (weight === 'bold' || weight === '700' || weight === '800' || weight === '900') {
+    fontFamily = Fonts.sansBold;
+  } else if (weight === '600') {
+    fontFamily = Fonts.sansSemiBold;
+  } else if (weight === '500') {
+    fontFamily = Fonts.sansMedium;
+  } else {
+    fontFamily = Fonts.sans;
   }
 
-  // Pass dynamic colors and override fontWeight since custom fonts handle their own bold geometry.
   return (
-    <NativeText 
-      {...rest} 
-      style={[{ color: colors.text, fontFamily }, style, { fontWeight: undefined }]} 
+    <NativeText
+      {...rest}
+      style={[{ color: Ember.textPrimary, fontFamily }, style, { fontWeight: undefined }]}
     />
   );
 }
