@@ -25,7 +25,7 @@ export default function ComposeScreen() {
 
   const [body, setBody] = useState('');
   const [tag, setTag] = useState<TagId>(activeTag);
-  const [mode, setMode] = useState<IdentityMode>(session.defaultMode);
+  const [mode, setMode] = useState<IdentityMode>(session?.defaultMode ?? 'anonymous');
 
   const canPost = body.trim().length > 0;
 
@@ -92,7 +92,7 @@ export default function ComposeScreen() {
             activeOpacity={0.8}
           >
             <Text style={[styles.segmentText, mode === 'named' ? styles.segmentTextActive : styles.segmentTextIdle]}>
-              Post as @{session.handle}
+              Post as @{session?.handle ?? 'you'}
             </Text>
           </TouchableOpacity>
         </View>

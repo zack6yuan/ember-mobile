@@ -38,11 +38,11 @@ function IdentityCard({
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setDefaultMode, session } = useUser();
+  const { finishOnboarding, session } = useUser();
   const [mode, setMode] = useState<IdentityMode>('anonymous');
 
   const onContinue = async () => {
-    await setDefaultMode(mode);
+    await finishOnboarding(mode);
     router.replace('/(tabs)/feed');
   };
 
@@ -74,7 +74,7 @@ export default function OnboardingScreen() {
           <IdentityCard
             emoji="✨"
             title="Pick a username"
-            subtitle={`Let people recognise you across posts${session.handle ? ` — you're @${session.handle}` : ''}.`}
+            subtitle={`Let people recognise you across posts${session?.handle ? ` — you're @${session.handle}` : ''}.`}
             selected={mode === 'named'}
             onPress={() => setMode('named')}
           />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,6 +9,7 @@ import { Text } from '@/components/Text';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, type Post } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
+import { useAuth } from '@/store/AuthContext';
 
 function sharedAs(post: Post): string {
   return post.author.mode === 'named' && post.author.handle
@@ -31,11 +33,20 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session } = useUser();
+  const { signOut } = useAuth();
   const { myPosts, savedPosts } = usePosts();
   const [tab, setTab] = useState<'mine' | 'saved'>('mine');
 
   const data = tab === 'mine' ? myPosts() : savedPosts();
-  const initial = session.handle.charAt(0).toUpperCase();
+  const handle = session?.handle ?? '';
+  const initial = handle.charAt(0).toUpperCase();
+
+  const onSignOut = () => {
+    Alert.alert('Sign out?', 'Your embers will be here when you come back.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: () => signOut() },
+    ]);
+  };
 
   const header = (
     <View>
@@ -44,11 +55,15 @@ export default function ProfileScreen() {
           <Text style={styles.avatarInitial}>{initial}</Text>
         </LinearGradient>
         <Text serif style={styles.handle}>
-          @{session.handle}
+          @{handle}
         </Text>
         <Text style={styles.meta}>
-          Here since {session.memberSince} · {session.embersShared} embers shared
+          Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} embers shared
         </Text>
+        <TouchableOpacity onPress={onSignOut} style={styles.signOut} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={16} color={Ember.textMuted} />
+          <Text style={styles.signOutText}>Sign out</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.tabs}>
@@ -103,6 +118,19 @@ const styles = StyleSheet.create({
   avatarInitial: { color: Ember.onGradient, fontSize: 28, fontWeight: '700' },
   handle: { fontSize: 22, color: Ember.textPrimary },
   meta: { color: Ember.textMutedDeep, fontSize: 13, marginTop: 4 },
+  signOut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: Radius.chip,
+    borderWidth: 1,
+    borderColor: Ember.border,
+    backgroundColor: Ember.surface3,
+  },
+  signOutText: { color: Ember.textMuted, fontSize: 13, fontWeight: '600' },
   tabs: { flexDirection: 'row', gap: 8, paddingVertical: 12 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: Radius.segment },
   tabActive: { backgroundColor: Ember.surface3 },
