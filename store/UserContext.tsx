@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, increment, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/store/AuthContext';
 import type { Identity, IdentityMode } from '@/store/PostsContext';
@@ -68,6 +68,8 @@ type UserContextType = {
   /** Persist the chosen default identity mode and mark onboarding complete. */
   finishOnboarding: (mode: IdentityMode) => Promise<void>;
   setDefaultMode: (mode: IdentityMode) => Promise<void>;
+  /** Count one more ember shared (called when the person publishes a post). */
+  incrementEmbersShared: () => void;
   isLoading: boolean;
 };
 
@@ -163,6 +165,19 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await persist({ ...session, defaultMode: mode });
   };
 
+  // Bump the shared-post tally: optimistic local update + a server-authoritative
+  // increment (merge so it works even if the field was never written).
+  const incrementEmbersShared = () => {
+    if (!session) return;
+    const uid = session.uid;
+    setSession((prev) =>
+      prev?.uid === uid ? { ...prev, embersShared: prev.embersShared + 1 } : prev
+    );
+    setDoc(userDocRef(uid), { embersShared: increment(1) }, { merge: true }).catch((e) =>
+      console.warn('Failed to increment embersShared:', e)
+    );
+  };
+
   // Daily check-in: once per app launch, bump the streak for a new local day.
   // Consecutive day → +1; a gap → reset to 1; same day → no change.
   const checkedInFor = useRef<string | null>(null);
@@ -198,6 +213,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createProfile,
         finishOnboarding,
         setDefaultMode,
+        incrementEmbersShared,
         isLoading,
       }}
     >
