@@ -1,4 +1,22 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { timeAgo } from '@/lib/time';
+import { useAuth } from '@/store/AuthContext';
 
 export type IdentityMode = 'anonymous' | 'named';
 export type Identity = { mode: IdentityMode; handle?: string };
@@ -48,93 +66,119 @@ export const TAG_ORDER: TagId[] = ['venting', 'wins', 'advice', 'gratitude', 'la
 const anon = (): Identity => ({ mode: 'anonymous' });
 const named = (handle: string): Identity => ({ mode: 'named', handle });
 
-const INITIAL_POSTS: Post[] = [
+/** Firestore never accepts `undefined`; drop the handle when it isn't a real named identity. */
+const cleanIdentity = (identity: Identity): Identity =>
+  identity.mode === 'named' && identity.handle ? { mode: 'named', handle: identity.handle } : { mode: 'anonymous' };
+
+// --- Firestore document shapes (stored) — timestamps are epoch ms ------------
+type StoredReply = { id: string; author: Identity; body: string; createdAt: number };
+type StoredPost = {
+  id: string; // Firestore doc id (added on read)
+  authorUid: string | null;
+  author: Identity;
+  tag: TagId;
+  body: string;
+  hugs: number;
+  hearts: number;
+  hugBy: string[];
+  heartBy: string[];
+  replies: StoredReply[];
+  createdAt: number;
+  seeded?: boolean; // demo content — never counted as the current user's own post
+};
+
+// --- Seed content (written once to an empty collection) ----------------------
+const MIN = 60_000;
+type SeedPost = Omit<StoredPost, 'id' | 'authorUid' | 'hugBy' | 'heartBy' | 'seeded'>;
+
+const SEED_POSTS: SeedPost[] = [
   {
-    id: '1',
     author: anon(),
     tag: 'venting',
     body: "Third night I can't sleep. Feels like everyone moved on with their lives and I'm just… stuck.",
     hugs: 34,
     hearts: 12,
-    createdAt: '4m',
-    mine: true, // the current user posted this anonymously (visible in their profile)
+    createdAt: Date.now() - 4 * MIN,
     replies: [
-      { id: 'r1', author: anon(), body: 'Stuck is still a place you can leave. Been there. It gets lighter.', createdAt: '2m' },
-      { id: 'r2', author: named('leo'), body: "Sitting with you tonight. You're not as behind as it feels. 🕯️", createdAt: '1m' },
-      { id: 'r3', author: anon(), body: 'The 3am hours lie to you. Morning always has a different opinion.', createdAt: '1m' },
+      { id: 'r1', author: anon(), body: 'Stuck is still a place you can leave. Been there. It gets lighter.', createdAt: Date.now() - 2 * MIN },
+      { id: 'r2', author: named('leo'), body: "Sitting with you tonight. You're not as behind as it feels. 🕯️", createdAt: Date.now() - 1 * MIN },
+      { id: 'r3', author: anon(), body: 'The 3am hours lie to you. Morning always has a different opinion.', createdAt: Date.now() - 1 * MIN },
     ],
   },
   {
-    id: '2',
     author: named('mia_r'),
     tag: 'wins',
     body: "Finally sent the email I'd been dreading for a month. Hands were shaking but I did it 🎉",
     hugs: 8,
     hearts: 51,
-    createdAt: '20m',
-    mine: true,
+    createdAt: Date.now() - 20 * MIN,
     replies: [
-      { id: 'r4', author: anon(), body: 'That first send is the hardest part. Proud of you.', createdAt: '12m' },
-      { id: 'r5', author: named('sam'), body: 'Shaking hands still hit send. That’s courage. 🎉', createdAt: '8m' },
+      { id: 'r4', author: anon(), body: 'That first send is the hardest part. Proud of you.', createdAt: Date.now() - 12 * MIN },
+      { id: 'r5', author: named('sam'), body: 'Shaking hands still hit send. That’s courage. 🎉', createdAt: Date.now() - 8 * MIN },
     ],
   },
   {
-    id: '3',
     author: named('jaylen'),
     tag: 'venting',
     body: "Burnt out and pretending I'm fine at work. Anyone else running on empty?",
     hugs: 40,
     hearts: 23,
-    createdAt: '18m',
+    createdAt: Date.now() - 18 * MIN,
     replies: [
-      { id: 'r6', author: anon(), body: 'Running on empty here too. You’re not alone in it.', createdAt: '10m' },
+      { id: 'r6', author: anon(), body: 'Running on empty here too. You’re not alone in it.', createdAt: Date.now() - 10 * MIN },
     ],
   },
   {
-    id: '4',
     author: anon(),
     tag: 'gratitude',
     body: 'A stranger paid for my coffee today and I nearly cried. Small things are keeping me going.',
     hugs: 12,
     hearts: 88,
-    createdAt: '1h',
+    createdAt: Date.now() - 60 * MIN,
     replies: [],
   },
   {
-    id: '5',
     author: named('priya'),
     tag: 'advice',
     body: "How do you tell a friend you need space without hurting them? I love them but I'm drowning.",
     hugs: 6,
     hearts: 14,
-    createdAt: '2h',
+    createdAt: Date.now() - 120 * MIN,
     replies: [
-      { id: 'r7', author: anon(), body: 'Honesty wrapped in care. “I love you and I need a little quiet” is enough.', createdAt: '1h' },
+      { id: 'r7', author: anon(), body: 'Honesty wrapped in care. “I love you and I need a little quiet” is enough.', createdAt: Date.now() - 90 * MIN },
     ],
   },
   {
-    id: '6',
     author: anon(),
     tag: 'latenight',
     body: "It's 3am and my brain won't stop rewriting conversations from years ago. Anyone up?",
     hugs: 29,
     hearts: 9,
-    createdAt: '3h',
+    createdAt: Date.now() - 180 * MIN,
     replies: [],
   },
   {
-    id: '7',
     author: named('noor'),
     tag: 'wins',
     body: 'Six months sober today. Told no one in my life yet, so I’m telling you first. 🕯️',
     hugs: 21,
     hearts: 140,
-    createdAt: '5h',
+    createdAt: Date.now() - 300 * MIN,
     replies: [
-      { id: 'r8', author: anon(), body: 'Six months is enormous. Thank you for trusting us with it.', createdAt: '4h' },
+      { id: 'r8', author: anon(), body: 'Six months is enormous. Thank you for trusting us with it.', createdAt: Date.now() - 240 * MIN },
     ],
   },
 ];
+
+/** Write the demo posts once, owned by the seeding user but flagged so they never show as "mine". */
+async function seedPosts(uid: string) {
+  const batch = writeBatch(db);
+  for (const seed of SEED_POSTS) {
+    const ref = doc(collection(db, 'posts'));
+    batch.set(ref, { ...seed, authorUid: uid, hugBy: [], heartBy: [], seeded: true });
+  }
+  await batch.commit();
+}
 
 type NewPostInput = { body: string; tag: TagId; identity: Identity };
 
@@ -151,75 +195,141 @@ type PostsContextType = {
   toggleHeart: (id: string) => void;
   toggleSave: (id: string) => void;
   addReply: (postId: string, body: string, identity: Identity) => void;
-  addPost: (input: NewPostInput) => string;
+  addPost: (input: NewPostInput) => Promise<void>;
 };
 
 const PostsContext = createContext<PostsContextType | undefined>(undefined);
 
 export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
+  const { user } = useAuth();
+  const uid = user?.uid;
+
+  const [rawPosts, setRawPosts] = useState<StoredPost[]>([]);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [activeTag, setActiveTag] = useState<TagId>('venting');
+  const seededRef = useRef(false);
+
+  // Live feed. Only subscribe when signed in (reads require auth).
+  useEffect(() => {
+    if (!uid) {
+      setRawPosts([]);
+      return;
+    }
+    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        setRawPosts(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredPost, 'id'>) })));
+        // Seed once, only against a confirmed-empty (server, not cached) collection.
+        if (!snap.metadata.fromCache && snap.empty && !seededRef.current) {
+          seededRef.current = true;
+          seedPosts(uid).catch((e) => console.warn('Failed to seed posts:', e));
+        }
+      },
+      (error) => console.warn('Posts listener error:', error)
+    );
+    return unsubscribe;
+  }, [uid]);
+
+  // The current user's saved-post ids (private subcollection).
+  useEffect(() => {
+    if (!uid) {
+      setSavedIds(new Set());
+      return;
+    }
+    const unsubscribe = onSnapshot(
+      collection(db, 'users', uid, 'saved'),
+      (snap) => setSavedIds(new Set(snap.docs.map((d) => d.id))),
+      (error) => console.warn('Saved listener error:', error)
+    );
+    return unsubscribe;
+  }, [uid]);
+
+  // Map stored docs → the display `Post` shape (derives per-user state).
+  const posts = useMemo<Post[]>(
+    () =>
+      rawPosts.map((r) => ({
+        id: r.id,
+        author: r.author,
+        tag: r.tag,
+        body: r.body,
+        hugs: r.hugs ?? 0,
+        hearts: r.hearts ?? 0,
+        replies: (r.replies ?? []).map((rp) => ({
+          id: rp.id,
+          author: rp.author,
+          body: rp.body,
+          createdAt: timeAgo(rp.createdAt),
+        })),
+        createdAt: timeAgo(r.createdAt),
+        mine: !!uid && r.authorUid === uid && !r.seeded,
+        saved: savedIds.has(r.id),
+        myHug: !!uid && (r.hugBy ?? []).includes(uid),
+        myHeart: !!uid && (r.heartBy ?? []).includes(uid),
+      })),
+    [rawPosts, savedIds, uid]
+  );
 
   const getPost = (id: string) => posts.find((p) => p.id === id);
   const postsByTag = (tag: TagId) => posts.filter((p) => p.tag === tag);
   const myPosts = () => posts.filter((p) => p.mine);
   const savedPosts = () => posts.filter((p) => p.saved);
 
-  const toggleHug = (id: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const on = !p.myHug;
-        return { ...p, myHug: on, hugs: p.hugs + (on ? 1 : -1) };
-      })
-    );
+  const toggleReaction = (id: string, field: 'hug' | 'heart') => {
+    if (!uid) return;
+    const raw = rawPosts.find((p) => p.id === id);
+    if (!raw) return;
+    const byField = field === 'hug' ? 'hugBy' : 'heartBy';
+    const countField = field === 'hug' ? 'hugs' : 'hearts';
+    const on = !(raw[byField] ?? []).includes(uid);
+    updateDoc(doc(db, 'posts', id), {
+      [byField]: on ? arrayUnion(uid) : arrayRemove(uid),
+      [countField]: increment(on ? 1 : -1),
+    }).catch((e) => console.warn('Failed to toggle reaction:', e));
   };
 
-  const toggleHeart = (id: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const on = !p.myHeart;
-        return { ...p, myHeart: on, hearts: p.hearts + (on ? 1 : -1) };
-      })
-    );
-  };
+  const toggleHug = (id: string) => toggleReaction(id, 'hug');
+  const toggleHeart = (id: string) => toggleReaction(id, 'heart');
 
   const toggleSave = (id: string) => {
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, saved: !p.saved } : p)));
+    if (!uid) return;
+    const ref = doc(db, 'users', uid, 'saved', id);
+    const op = savedIds.has(id) ? deleteDoc(ref) : setDoc(ref, { savedAt: Date.now() });
+    op.catch((e) => console.warn('Failed to toggle save:', e));
   };
 
   const addReply = (postId: string, body: string, identity: Identity) => {
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              replies: [
-                ...p.replies,
-                { id: `r_${Date.now()}`, author: identity, body, createdAt: 'now' },
-              ],
-            }
-          : p
-      )
+    if (!uid) return;
+    const reply: StoredReply = {
+      id: `r_${Date.now()}`,
+      author: cleanIdentity(identity),
+      body,
+      createdAt: Date.now(),
+    };
+    updateDoc(doc(db, 'posts', postId), { replies: arrayUnion(reply) }).catch((e) =>
+      console.warn('Failed to add reply:', e)
     );
   };
 
-  const addPost = ({ body, tag, identity }: NewPostInput) => {
-    const id = `p_${Date.now()}`;
-    const post: Post = {
-      id,
-      author: identity,
+  const addPost = async ({ body, tag, identity }: NewPostInput) => {
+    if (!uid) return;
+    const post: Omit<StoredPost, 'id'> = {
+      authorUid: uid,
+      author: cleanIdentity(identity),
       tag,
       body,
       hugs: 0,
       hearts: 0,
+      hugBy: [],
+      heartBy: [],
       replies: [],
-      createdAt: 'now',
-      mine: true,
+      createdAt: Date.now(),
     };
-    setPosts((prev) => [post, ...prev]);
-    return id;
+    try {
+      await addDoc(collection(db, 'posts'), post);
+    } catch (e) {
+      console.warn('Failed to add post:', e);
+    }
   };
 
   return (
