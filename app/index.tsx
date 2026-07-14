@@ -139,8 +139,8 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
-        <PrimaryButton label="Get started" onPress={() => router.push('/onboarding')} />
-        <SecondaryButton label="I already have an account" onPress={() => router.replace('/(tabs)/feed')} />
+        <PrimaryButton label="Get started" onPress={() => router.push('/signup')} />
+        <SecondaryButton label="I already have an account" onPress={() => router.push('/login')} />
         <Text style={styles.footnote}>🌙 Stay anonymous or share your name — always your choice.</Text>
       </View>
     </View>
