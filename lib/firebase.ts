@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 // @ts-expect-error getReactNativePersistence lacks bundled type exports in firebase 12
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,7 +17,13 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// The Firebase JS SDK's default Firestore transport (WebChannel streaming) does
+// not work reliably in React Native — it silently falls back to cache-only, so
+// writes never reach the server. Forcing long-polling fixes cloud sync on device.
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 
 // Auth with AsyncStorage persistence so sessions survive app restarts on native.
 export const auth = initializeAuth(app, {
