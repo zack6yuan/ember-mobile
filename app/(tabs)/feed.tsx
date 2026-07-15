@@ -11,26 +11,36 @@ import { TagChip } from '@/components/TagChip';
 import { PostCard } from '@/components/PostCard';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, TAG_ORDER } from '@/store/PostsContext';
+import { useUser } from '@/store/UserContext';
 
 export default function FeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { postsByTag, activeTag, setActiveTag } = usePosts();
+  const { session } = useUser();
 
   const posts = postsByTag(activeTag);
+  const streak = session?.streak ?? 0;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <EmberLogo size={26} />
-        <TouchableOpacity
-          style={styles.bell}
-          activeOpacity={0.8}
-          onPress={() => router.navigate('/(tabs)/notifications')}
-        >
-          <Ionicons name="notifications-outline" size={16} color={Ember.textSecondary} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {streak > 0 && (
+            <View style={styles.streakChip}>
+              <Text style={styles.streakText}>🔥 {streak}</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.bell}
+            activeOpacity={0.8}
+            onPress={() => router.navigate('/(tabs)/notifications')}
+          >
+            <Ionicons name="notifications-outline" size={16} color={Ember.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tag chips */}
@@ -85,6 +95,18 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  streakChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    backgroundColor: Ember.surface3,
+    borderWidth: 1,
+    borderColor: 'rgba(240,130,74,0.35)',
+  },
+  streakText: { color: Ember.emberLight, fontSize: 13, fontWeight: '700' },
   bell: {
     width: 34,
     height: 34,

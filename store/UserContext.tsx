@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { doc, getDoc, increment, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/store/AuthContext';
 import type { Identity, IdentityMode } from '@/store/PostsContext';
@@ -17,11 +17,24 @@ export type Session = {
   memberSince: string; // display string, e.g. "March"
   embersShared: number;
   onboarded: boolean; // has the person finished the identity onboarding step
+  streak: number; // consecutive days the person has opened the app
+  lastCheckIn: string; // local YYYY-MM-DD of the last counted check-in ('' if never)
+  longestStreak: number; // best streak reached
 };
 
 /** The month name shown as "Here since …" for a new account. */
 function currentMonth(): string {
   return new Date().toLocaleString('en-US', { month: 'long' });
+}
+
+/** Local calendar date as YYYY-MM-DD, offset by whole days (for streak math). */
+function localDateStr(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function userDocRef(uid: string) {
@@ -37,6 +50,9 @@ function defaultProfile(uid: string, handle: string | null | undefined): Session
     memberSince: currentMonth(),
     embersShared: 0,
     onboarded: false,
+    streak: 0,
+    lastCheckIn: '',
+    longestStreak: 0,
   };
 }
 
@@ -52,6 +68,8 @@ type UserContextType = {
   /** Persist the chosen default identity mode and mark onboarding complete. */
   finishOnboarding: (mode: IdentityMode) => Promise<void>;
   setDefaultMode: (mode: IdentityMode) => Promise<void>;
+  /** Count one more ember shared (called when the person publishes a post). */
+  incrementEmbersShared: () => void;
   isLoading: boolean;
 };
 
@@ -87,6 +105,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             memberSince: data.memberSince || currentMonth(),
             embersShared: data.embersShared ?? 0,
             onboarded: data.onboarded ?? false,
+            streak: data.streak ?? 0,
+            lastCheckIn: data.lastCheckIn ?? '',
+            longestStreak: data.longestStreak ?? 0,
           });
         } else {
           // No profile doc — self-heal so an authenticated user always has a
@@ -144,6 +165,39 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await persist({ ...session, defaultMode: mode });
   };
 
+  // Bump the shared-post tally: optimistic local update + a server-authoritative
+  // increment (merge so it works even if the field was never written).
+  const incrementEmbersShared = () => {
+    if (!session) return;
+    const uid = session.uid;
+    setSession((prev) =>
+      prev?.uid === uid ? { ...prev, embersShared: prev.embersShared + 1 } : prev
+    );
+    setDoc(userDocRef(uid), { embersShared: increment(1) }, { merge: true }).catch((e) =>
+      console.warn('Failed to increment embersShared:', e)
+    );
+  };
+
+  // Daily check-in: once per app launch, bump the streak for a new local day.
+  // Consecutive day → +1; a gap → reset to 1; same day → no change.
+  const checkedInFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session || checkedInFor.current === session.uid) return;
+    checkedInFor.current = session.uid;
+
+    const today = localDateStr();
+    if (session.lastCheckIn === today) return;
+    const nextStreak = session.lastCheckIn === localDateStr(-1) ? session.streak + 1 : 1;
+    persist({
+      ...session,
+      streak: nextStreak,
+      lastCheckIn: today,
+      longestStreak: Math.max(session.longestStreak, nextStreak),
+    });
+    // Runs once when the profile first loads for this uid.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.uid]);
+
   const anonIdentity: Identity = { mode: 'anonymous' };
   const namedIdentity: Identity = { mode: 'named', handle: session?.handle };
   const defaultIdentity: Identity =
@@ -159,6 +213,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createProfile,
         finishOnboarding,
         setDefaultMode,
+        incrementEmbersShared,
         isLoading,
       }}
     >

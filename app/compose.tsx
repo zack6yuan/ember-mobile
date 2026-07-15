@@ -21,7 +21,7 @@ export default function ComposeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { addPost, activeTag, setActiveTag } = usePosts();
-  const { session, anonIdentity, namedIdentity } = useUser();
+  const { session, anonIdentity, namedIdentity, incrementEmbersShared } = useUser();
 
   const [body, setBody] = useState('');
   const [tag, setTag] = useState<TagId>(activeTag);
@@ -33,6 +33,7 @@ export default function ComposeScreen() {
     if (!canPost) return;
     const identity = mode === 'named' ? namedIdentity : anonIdentity;
     addPost({ body: body.trim(), tag, identity });
+    incrementEmbersShared();
     setActiveTag(tag);
     router.replace('/posted');
   };

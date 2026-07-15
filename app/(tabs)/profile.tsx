@@ -58,8 +58,15 @@ export default function ProfileScreen() {
           @{handle}
         </Text>
         <Text style={styles.meta}>
-          Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} embers shared
+          Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} ember
+          {(session?.embersShared ?? 0) === 1 ? '' : 's'} shared
         </Text>
+        {!!session && session.streak > 0 && (
+          <Text style={styles.streak}>
+            🔥 {session.streak}-day streak
+            {session.longestStreak > session.streak ? ` · longest ${session.longestStreak}` : ''}
+          </Text>
+        )}
         <TouchableOpacity onPress={onSignOut} style={styles.signOut} activeOpacity={0.8}>
           <Ionicons name="log-out-outline" size={16} color={Ember.textMuted} />
           <Text style={styles.signOutText}>Sign out</Text>
@@ -118,6 +125,7 @@ const styles = StyleSheet.create({
   avatarInitial: { color: Ember.onGradient, fontSize: 28, fontWeight: '700' },
   handle: { fontSize: 22, color: Ember.textPrimary },
   meta: { color: Ember.textMutedDeep, fontSize: 13, marginTop: 4 },
+  streak: { color: Ember.emberLight, fontSize: 13, fontWeight: '700', marginTop: 8 },
   signOut: {
     flexDirection: 'row',
     alignItems: 'center',
