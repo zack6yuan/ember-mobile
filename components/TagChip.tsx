@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, ViewStyle, StyleProp } from 'react-native';
+import { StyleSheet, TouchableOpacity, ViewStyle, StyleProp, LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from '@/components/Text';
 import { Ember, EmberGradientAlt, Radius } from '@/constants/theme';
@@ -8,15 +8,20 @@ import { Ember, EmberGradientAlt, Radius } from '@/constants/theme';
 export function TagChip({
   label,
   active,
+  unjoined,
   onPress,
   small,
   style,
+  onLayout,
 }: {
   label: string;
   active?: boolean;
+  /** Not yet joined — outlined + dimmed with a ＋, so it reads as discoverable. */
+  unjoined?: boolean;
   onPress?: () => void;
   small?: boolean;
   style?: StyleProp<ViewStyle>;
+  onLayout?: (e: LayoutChangeEvent) => void;
 }) {
   const padV = small ? 6 : 7;
   const padH = small ? 12 : 14;
@@ -24,7 +29,7 @@ export function TagChip({
 
   if (active) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={style}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={style} onLayout={onLayout}>
         <LinearGradient
           colors={EmberGradientAlt}
           start={{ x: 0, y: 0 }}
@@ -41,15 +46,35 @@ export function TagChip({
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
-      style={[styles.chip, styles.inactive, { paddingVertical: padV, paddingHorizontal: padH }, style]}
+      style={[
+        styles.chip,
+        unjoined ? styles.unjoined : styles.inactive,
+        { paddingVertical: padV, paddingHorizontal: padH },
+        style,
+      ]}
+      onLayout={onLayout}
     >
-      <Text style={[styles.label, { color: Ember.textSecondary, fontSize }]}>{label}</Text>
+      {unjoined && <Text style={[styles.plus, { fontSize }]}>＋</Text>}
+      <Text style={[styles.label, { color: unjoined ? Ember.textMuted : Ember.textSecondary, fontSize }]}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  chip: { borderRadius: Radius.chip, alignItems: 'center', justifyContent: 'center' },
+  chip: {
+    borderRadius: Radius.chip,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    // transparent border keeps filled and outlined chips the same height
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
   inactive: { backgroundColor: Ember.surface3 },
+  unjoined: { backgroundColor: 'transparent', borderColor: Ember.borderStrong },
+  plus: { color: Ember.textMutedDeep, fontWeight: '700' },
   label: { fontWeight: '700' },
 });
