@@ -21,7 +21,18 @@ import { useAuth } from '@/store/AuthContext';
 export type IdentityMode = 'anonymous' | 'named';
 export type Identity = { mode: IdentityMode; handle?: string };
 
-export type TagId = 'venting' | 'wins' | 'advice' | 'gratitude' | 'latenight';
+export type TagId =
+  | 'venting'
+  | 'wins'
+  | 'advice'
+  | 'gratitude'
+  | 'latenight'
+  | 'lonely'
+  | 'healing'
+  | 'heartbreak'
+  | 'work'
+  | 'grief'
+  | 'hope';
 
 export type Reply = {
   id: string;
@@ -59,9 +70,27 @@ export const COMMUNITIES: Community[] = [
   { tag: 'advice', emoji: '💬', name: '#advice', description: 'Ask, and be heard', count: 143 },
   { tag: 'gratitude', emoji: '🕯️', name: '#gratitude', description: 'Notice the good', count: 74 },
   { tag: 'latenight', emoji: '🌙', name: '#latenight', description: 'For the 3am thoughts', count: 51 },
+  { tag: 'lonely', emoji: '🫂', name: '#lonely', description: "For when no one's around", count: 63 },
+  { tag: 'healing', emoji: '🌱', name: '#healing', description: 'One small step forward', count: 88 },
+  { tag: 'heartbreak', emoji: '💔', name: '#heartbreak', description: 'Love, loss, and letting go', count: 47 },
+  { tag: 'work', emoji: '💼', name: '#work', description: 'Burnout, bosses, and Mondays', count: 112 },
+  { tag: 'grief', emoji: '🕊️', name: '#grief', description: "Carrying what we've lost", count: 29 },
+  { tag: 'hope', emoji: '☀️', name: '#hope', description: 'Reasons to keep going', count: 55 },
 ];
 
-export const TAG_ORDER: TagId[] = ['venting', 'wins', 'advice', 'gratitude', 'latenight'];
+export const TAG_ORDER: TagId[] = [
+  'venting',
+  'wins',
+  'advice',
+  'gratitude',
+  'latenight',
+  'lonely',
+  'healing',
+  'heartbreak',
+  'work',
+  'grief',
+  'hope',
+];
 
 const anon = (): Identity => ({ mode: 'anonymous' });
 const named = (handle: string): Identity => ({ mode: 'named', handle });
