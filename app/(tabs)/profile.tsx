@@ -58,7 +58,8 @@ export default function ProfileScreen() {
           @{handle}
         </Text>
         <Text style={styles.meta}>
-          Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} embers shared
+          Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} ember
+          {(session?.embersShared ?? 0) === 1 ? '' : 's'} shared
         </Text>
         {!!session && session.streak > 0 && (
           <Text style={styles.streak}>
