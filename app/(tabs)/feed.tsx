@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,17 @@ export default function FeedScreen() {
 
   const posts = postsByTag(activeTag);
   const streak = session?.streak ?? 0;
+
+  // Keep the selected chip on screen — e.g. when arriving from the Circles tab
+  // with a community far down the list, the row would otherwise stay scrolled
+  // to the start with the active chip off-screen.
+  const chipScrollRef = useRef<ScrollView>(null);
+  const chipOffsets = useRef<Record<string, number>>({});
+  const scrollActiveIntoView = () => {
+    const x = chipOffsets.current[activeTag];
+    if (x != null) chipScrollRef.current?.scrollTo({ x: Math.max(0, x - 20), animated: true });
+  };
+  useEffect(scrollActiveIntoView, [activeTag]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -45,13 +56,24 @@ export default function FeedScreen() {
 
       {/* Tag chips */}
       <View style={styles.chipsWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        <ScrollView
+          ref={chipScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+        >
           {TAG_ORDER.map((tag) => (
             <TagChip
               key={tag}
               label={`#${tag}`}
               active={activeTag === tag}
               onPress={() => setActiveTag(tag)}
+              onLayout={(e) => {
+                chipOffsets.current[tag] = e.nativeEvent.layout.x;
+                // On first mount the effect above may run before layout is
+                // measured; scroll once the active chip reports its position.
+                if (activeTag === tag) scrollActiveIntoView();
+              }}
             />
           ))}
         </ScrollView>
