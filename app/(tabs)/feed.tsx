@@ -10,17 +10,45 @@ import { EmberLogo } from '@/components/EmberLogo';
 import { TagChip } from '@/components/TagChip';
 import { PostCard } from '@/components/PostCard';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
-import { usePosts, TAG_ORDER } from '@/store/PostsContext';
+import { usePosts, TAG_ORDER, type TagId } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 
 export default function FeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { postsByTag, activeTag, setActiveTag } = usePosts();
-  const { session } = useUser();
+  const { session, joinCircle } = useUser();
 
   const posts = postsByTag(activeTag);
   const streak = session?.streak ?? 0;
+
+  // Filter chips: circles you've joined come first (filled), the rest follow
+  // (outlined + dimmed) so every circle stays reachable without burying yours.
+  const joined = session?.joinedCircles ?? [];
+  const joinedTags = TAG_ORDER.filter((t) => joined.includes(t));
+  const unjoinedTags = TAG_ORDER.filter((t) => !joined.includes(t));
+
+  // Tapping a joined chip filters; tapping an un-joined one joins it, then filters.
+  const selectTag = (tag: TagId) => {
+    if (!joined.includes(tag)) joinCircle(tag);
+    setActiveTag(tag);
+  };
+
+  const renderChip = (tag: TagId) => (
+    <TagChip
+      key={tag}
+      label={`#${tag}`}
+      active={activeTag === tag}
+      unjoined={!joined.includes(tag)}
+      onPress={() => selectTag(tag)}
+      onLayout={(e) => {
+        chipOffsets.current[tag] = e.nativeEvent.layout.x;
+        // On first mount the effect above may run before layout is
+        // measured; scroll once the active chip reports its position.
+        if (activeTag === tag) scrollActiveIntoView();
+      }}
+    />
+  );
 
   // Keep the selected chip on screen — e.g. when arriving from the Circles tab
   // with a community far down the list, the row would otherwise stay scrolled
@@ -62,20 +90,11 @@ export default function FeedScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chips}
         >
-          {TAG_ORDER.map((tag) => (
-            <TagChip
-              key={tag}
-              label={`#${tag}`}
-              active={activeTag === tag}
-              onPress={() => setActiveTag(tag)}
-              onLayout={(e) => {
-                chipOffsets.current[tag] = e.nativeEvent.layout.x;
-                // On first mount the effect above may run before layout is
-                // measured; scroll once the active chip reports its position.
-                if (activeTag === tag) scrollActiveIntoView();
-              }}
-            />
-          ))}
+          {joinedTags.map(renderChip)}
+          {joinedTags.length > 0 && unjoinedTags.length > 0 && (
+            <View style={styles.chipDivider} />
+          )}
+          {unjoinedTags.map(renderChip)}
         </ScrollView>
       </View>
 
@@ -138,7 +157,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipsWrap: { paddingBottom: 12 },
-  chips: { paddingHorizontal: 20, gap: 8 },
+  chips: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
+  chipDivider: { width: 1, height: 22, backgroundColor: Ember.borderStrong, marginHorizontal: 2 },
   list: { paddingHorizontal: 16, paddingBottom: 170 },
   empty: { paddingTop: 80, paddingHorizontal: 24, alignItems: 'center' },
   emptyText: { color: Ember.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 22 },

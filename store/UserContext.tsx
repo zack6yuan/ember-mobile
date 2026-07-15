@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { doc, getDoc, increment, setDoc } from 'firebase/firestore';
+import { arrayUnion, doc, getDoc, increment, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/store/AuthContext';
-import type { Identity, IdentityMode } from '@/store/PostsContext';
+import type { Identity, IdentityMode, TagId } from '@/store/PostsContext';
+
+/** Circles a brand-new account starts joined to. Everything else is discoverable. */
+export const DEFAULT_JOINED: TagId[] = ['venting', 'wins', 'advice'];
 
 /**
  * The signed-in person's Ember profile, stored at `users/{uid}` in Firestore.
@@ -20,6 +23,7 @@ export type Session = {
   streak: number; // consecutive days the person has opened the app
   lastCheckIn: string; // local YYYY-MM-DD of the last counted check-in ('' if never)
   longestStreak: number; // best streak reached
+  joinedCircles: TagId[]; // communities the person has joined (drives the feed filters)
 };
 
 /** The month name shown as "Here since …" for a new account. */
@@ -53,6 +57,7 @@ function defaultProfile(uid: string, handle: string | null | undefined): Session
     streak: 0,
     lastCheckIn: '',
     longestStreak: 0,
+    joinedCircles: DEFAULT_JOINED,
   };
 }
 
@@ -70,6 +75,8 @@ type UserContextType = {
   setDefaultMode: (mode: IdentityMode) => Promise<void>;
   /** Count one more ember shared (called when the person publishes a post). */
   incrementEmbersShared: () => void;
+  /** Join a community (tapping an un-joined circle in the feed filters). */
+  joinCircle: (tag: TagId) => void;
   isLoading: boolean;
 };
 
@@ -108,6 +115,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             streak: data.streak ?? 0,
             lastCheckIn: data.lastCheckIn ?? '',
             longestStreak: data.longestStreak ?? 0,
+            joinedCircles: data.joinedCircles ?? DEFAULT_JOINED,
           });
         } else {
           // No profile doc — self-heal so an authenticated user always has a
@@ -178,6 +186,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  // Join a community: optimistic local add + a server-authoritative arrayUnion
+  // (idempotent, so re-joining is a no-op both locally and remotely).
+  const joinCircle = (tag: TagId) => {
+    if (!session || session.joinedCircles.includes(tag)) return;
+    const uid = session.uid;
+    setSession((prev) =>
+      prev?.uid === uid && !prev.joinedCircles.includes(tag)
+        ? { ...prev, joinedCircles: [...prev.joinedCircles, tag] }
+        : prev
+    );
+    setDoc(userDocRef(uid), { joinedCircles: arrayUnion(tag) }, { merge: true }).catch((e) =>
+      console.warn('Failed to join circle:', e)
+    );
+  };
+
   // Daily check-in: once per app launch, bump the streak for a new local day.
   // Consecutive day → +1; a gap → reset to 1; same day → no change.
   const checkedInFor = useRef<string | null>(null);
@@ -214,6 +237,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         finishOnboarding,
         setDefaultMode,
         incrementEmbersShared,
+        joinCircle,
         isLoading,
       }}
     >
