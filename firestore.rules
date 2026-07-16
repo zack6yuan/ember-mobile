@@ -13,13 +13,16 @@ service cloud.firestore {
     }
 
     // Posts are readable by any signed-in user. You may only create a post as
-    // yourself, and only delete your own. Updates (reactions + replies) are open
-    // to any signed-in user.
+    // yourself, and only delete your own. Any signed-in user may react or reply,
+    // but an update may ONLY touch the reaction/reply fields — never the body,
+    // tag, author, or authorUid — so no one can edit someone else's post.
     match /posts/{postId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
                     && request.resource.data.authorUid == request.auth.uid;
-      allow update: if request.auth != null;
+      allow update: if request.auth != null
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['hugBy', 'heartBy', 'hugs', 'hearts', 'replies']);
       allow delete: if request.auth != null
                     && resource.data.authorUid == request.auth.uid;
     }
