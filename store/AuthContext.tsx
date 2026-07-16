@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as fbSignOut,
   updateProfile,
@@ -17,6 +18,8 @@ type AuthContextType = {
   signUp: (email: string, password: string, handle: string) => Promise<User>;
   signIn: (email: string, password: string) => Promise<User>;
   signOut: () => Promise<void>;
+  /** Send a password-reset email via Firebase. */
+  resetPassword: (email: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -69,8 +72,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = () => fbSignOut(auth);
 
+  const resetPassword = (email: string) => sendPasswordResetEmail(auth, email.trim());
+
   return (
-    <AuthContext.Provider value={{ user, initializing, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, initializing, signUp, signIn, signOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

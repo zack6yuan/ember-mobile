@@ -21,16 +21,19 @@ import { useAuth, authErrorMessage } from '@/store/AuthContext';
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signIn } = useAuth();
+  const { signIn, resetPassword } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const onSubmit = async () => {
     setError(null);
+    setNotice(null);
     if (!email.trim() || !password) {
       setError('Enter your email and password to continue.');
       return;
@@ -44,6 +47,33 @@ export default function LoginScreen() {
       setError(authErrorMessage(e));
       setSubmitting(false);
     }
+  };
+
+  const onForgotPassword = async () => {
+    setError(null);
+    setNotice(null);
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError('Enter your email above, then tap “Forgot password?” for a reset link.');
+      return;
+    }
+
+    setResetting(true);
+    try {
+      await resetPassword(trimmed);
+    } catch (e) {
+      // Surface only actionable problems (bad email / network). For an unknown
+      // account, fall through to the same neutral confirmation so the form
+      // never reveals whether an email is registered.
+      const code = (e as { code?: string })?.code ?? '';
+      if (code !== 'auth/user-not-found') {
+        setError(authErrorMessage(e));
+        setResetting(false);
+        return;
+      }
+    }
+    setNotice(`If an account exists for ${trimmed}, a reset link is on its way. Check your inbox.`);
+    setResetting(false);
   };
 
   return (
@@ -111,10 +141,19 @@ export default function LoginScreen() {
                 />
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              onPress={onForgotPassword}
+              disabled={resetting}
+              hitSlop={8}
+              style={styles.forgot}
+            >
+              <Text style={styles.forgotText}>{resetting ? 'Sending…' : 'Forgot password?'}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
         {error && <Text style={styles.error}>{error}</Text>}
+        {notice && <Text style={styles.notice}>{notice}</Text>}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
@@ -165,7 +204,10 @@ const styles = StyleSheet.create({
     paddingRight: 14,
   },
   passwordInput: { flex: 1, backgroundColor: 'transparent', borderWidth: 0 },
+  forgot: { alignSelf: 'flex-end', marginTop: 10, paddingVertical: 2 },
+  forgotText: { color: Ember.ember, fontSize: 13, fontWeight: '600' },
   error: { color: '#ff9b73', fontSize: 13, lineHeight: 19, marginTop: 16 },
+  notice: { color: '#8fce7e', fontSize: 13, lineHeight: 19, marginTop: 16 },
   footer: { paddingHorizontal: 26, gap: 14 },
   spinner: { position: 'absolute', top: 18, right: 42 },
   switch: { alignItems: 'center' },
