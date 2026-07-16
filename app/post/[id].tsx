@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,7 +39,7 @@ export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getPost, toggleHug, toggleHeart, addReply } = usePosts();
+  const { getPost, toggleHug, toggleHeart, addReply, deletePost } = usePosts();
   const { defaultIdentity } = useUser();
   const [text, setText] = useState('');
 
@@ -51,6 +52,20 @@ export default function PostDetailScreen() {
     setText('');
   };
 
+  const confirmDelete = () => {
+    Alert.alert('Delete post?', 'This removes it for everyone. This can’t be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          deletePost(post.id);
+          router.back();
+        },
+      },
+    ]);
+  };
+
   const header = (
     <View>
       <View style={styles.topBar}>
@@ -58,6 +73,12 @@ export default function PostDetailScreen() {
           <Ionicons name="chevron-back" size={24} color={Ember.textSecondary} />
         </TouchableOpacity>
         <Text style={styles.tag}>#{post.tag}</Text>
+        <View style={styles.topBarSpacer} />
+        {post.mine && (
+          <TouchableOpacity onPress={confirmDelete} hitSlop={10}>
+            <Ionicons name="trash-outline" size={20} color={Ember.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.authorRow}>
@@ -131,6 +152,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Ember.bg },
   list: { paddingHorizontal: 18, paddingBottom: 20 },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 10 },
+  topBarSpacer: { flex: 1 },
   tag: { color: Ember.ember, fontSize: 13, fontWeight: '700' },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   authorName: { color: '#e9d9cd', fontSize: 13, fontWeight: '600' },

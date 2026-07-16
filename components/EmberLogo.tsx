@@ -1,24 +1,31 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { Text } from '@/components/Text';
-import { Ember, EmberGradientAlt } from '@/constants/theme';
+import { Ember } from '@/constants/theme';
 
-/** Flame logo tile + optional "Ember" wordmark (Newsreader). */
-export function EmberLogo({ size = 26, showWordmark = true }: { size?: number; showWordmark?: boolean }) {
+const LOGO = require('@/assets/images/ember-logo.png');
+
+/** Flame logo + optional wordmark (Newsreader). Defaults to the "Ember" wordmark. */
+export function EmberLogo({
+  size = 26,
+  showWordmark = true,
+  wordmark = 'Ember',
+}: {
+  size?: number;
+  showWordmark?: boolean;
+  wordmark?: string;
+}) {
   return (
     <View style={styles.row}>
-      <LinearGradient
-        colors={EmberGradientAlt}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.3, y: 1 }}
-        style={[styles.tile, { width: size, height: size, borderRadius: size * 0.34 }]}
-      >
-        <Text style={{ fontSize: Math.round(size * 0.54) }}>🔥</Text>
-      </LinearGradient>
+      <Image
+        source={LOGO}
+        style={{ width: size, height: size, transform: [{ translateY: -2 }] }}
+        contentFit="contain"
+      />
       {showWordmark ? (
-        <Text serif style={styles.wordmark}>
-          Ember
+        <Text serif numberOfLines={1} style={styles.wordmark}>
+          {wordmark}
         </Text>
       ) : null}
     </View>
@@ -26,14 +33,6 @@ export function EmberLogo({ size = 26, showWordmark = true }: { size?: number; s
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  tile: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#f07828',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 12,
-  },
-  wordmark: { fontSize: 22, color: Ember.textPrimary },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 },
+  wordmark: { fontSize: 20, color: Ember.textPrimary, flexShrink: 1 },
 });

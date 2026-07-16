@@ -225,6 +225,8 @@ type PostsContextType = {
   toggleSave: (id: string) => void;
   addReply: (postId: string, body: string, identity: Identity) => void;
   addPost: (input: NewPostInput) => Promise<void>;
+  /** Delete one of your own posts (owner-only, enforced by Firestore rules). */
+  deletePost: (id: string) => void;
 };
 
 const PostsContext = createContext<PostsContextType | undefined>(undefined);
@@ -340,6 +342,13 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
+  // Delete a post. The live listener drops it from local state automatically;
+  // Firestore rules reject the write unless you're the author.
+  const deletePost = (id: string) => {
+    if (!uid) return;
+    deleteDoc(doc(db, 'posts', id)).catch((e) => console.warn('Failed to delete post:', e));
+  };
+
   const addPost = async ({ body, tag, identity }: NewPostInput) => {
     if (!uid) return;
     const post: Omit<StoredPost, 'id'> = {
@@ -377,6 +386,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleSave,
         addReply,
         addPost,
+        deletePost,
       }}
     >
       {children}
