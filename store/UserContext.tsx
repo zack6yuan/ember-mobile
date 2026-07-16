@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { arrayUnion, doc, getDoc, increment, setDoc } from 'firebase/firestore';
+import { updateProfile as updateAuthProfile } from 'firebase/auth';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/store/AuthContext';
+import { DEFAULT_AVATAR } from '@/constants/avatars';
 import type { Identity, IdentityMode, TagId } from '@/store/PostsContext';
 
 /** Circles a brand-new account starts joined to. Everything else is discoverable. */
@@ -16,6 +18,7 @@ export const DEFAULT_JOINED: TagId[] = ['venting', 'wins', 'advice'];
 export type Session = {
   uid: string; // Firebase Auth uid this profile belongs to
   handle: string; // account username, e.g. "mia_r"
+  avatar: string; // preset avatar id (see constants/avatars), e.g. "flame"
   defaultMode: IdentityMode; // default from onboarding
   memberSince: string; // display string, e.g. "March"
   embersShared: number;
@@ -50,6 +53,7 @@ function defaultProfile(uid: string, handle: string | null | undefined): Session
   return {
     uid,
     handle: handle || 'friend',
+    avatar: DEFAULT_AVATAR,
     defaultMode: 'anonymous',
     memberSince: currentMonth(),
     embersShared: 0,
@@ -73,6 +77,8 @@ type UserContextType = {
   /** Persist the chosen default identity mode and mark onboarding complete. */
   finishOnboarding: (mode: IdentityMode) => Promise<void>;
   setDefaultMode: (mode: IdentityMode) => Promise<void>;
+  /** Update editable profile fields (handle and/or preset avatar). */
+  updateProfile: (patch: { handle?: string; avatar?: string }) => Promise<void>;
   /** Count one more ember shared (called when the person publishes a post). */
   incrementEmbersShared: () => void;
   /** Join a community (tapping an un-joined circle in the feed filters). */
@@ -108,6 +114,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSession({
             uid,
             handle: data.handle || user.displayName || 'friend',
+            avatar: data.avatar || DEFAULT_AVATAR,
             defaultMode: data.defaultMode || 'anonymous',
             memberSince: data.memberSince || currentMonth(),
             embersShared: data.embersShared ?? 0,
@@ -173,6 +180,19 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await persist({ ...session, defaultMode: mode });
   };
 
+  // Edit the handle and/or preset avatar. Persists to Firestore and, when the
+  // handle changes, keeps the Firebase Auth displayName in sync (it's the
+  // fallback used when the profile doc can't be read).
+  const updateProfile = async (patch: { handle?: string; avatar?: string }) => {
+    if (!session) return;
+    await persist({ ...session, ...patch });
+    if (patch.handle && user && patch.handle !== session.handle) {
+      updateAuthProfile(user, { displayName: patch.handle }).catch((e) =>
+        console.warn('Failed to sync displayName:', e)
+      );
+    }
+  };
+
   // Bump the shared-post tally: optimistic local update + a server-authoritative
   // increment (merge so it works even if the field was never written).
   const incrementEmbersShared = () => {
@@ -236,6 +256,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createProfile,
         finishOnboarding,
         setDefaultMode,
+        updateProfile,
         incrementEmbersShared,
         joinCircle,
         isLoading,

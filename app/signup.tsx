@@ -18,8 +18,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { Ember, Radius } from '@/constants/theme';
 import { useAuth, authErrorMessage } from '@/store/AuthContext';
 import { useUser } from '@/store/UserContext';
-
-const HANDLE_RE = /^[a-z0-9_]{3,20}$/;
+import { HANDLE_RE } from '@/lib/handle';
 
 export default function SignUpScreen() {
   const router = useRouter();

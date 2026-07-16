@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
-import { Ember, EmberGradient, Radius } from '@/constants/theme';
+import { PresetAvatar } from '@/components/Avatar';
+import { Ember, Radius } from '@/constants/theme';
 import { usePosts, type Post } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 import { useAuth } from '@/store/AuthContext';
@@ -51,9 +51,13 @@ export default function ProfileScreen() {
   const header = (
     <View>
       <View style={styles.identity}>
-        <LinearGradient colors={EmberGradient} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={styles.avatar}>
-          <Text style={styles.avatarInitial}>{initial}</Text>
-        </LinearGradient>
+        <TouchableOpacity
+          style={styles.avatarWrap}
+          activeOpacity={0.85}
+          onPress={() => router.push('/edit-profile')}
+        >
+          <PresetAvatar presetId={session?.avatar} initial={initial} size={64} />
+        </TouchableOpacity>
         <Text serif style={styles.handle}>
           @{handle}
         </Text>
@@ -67,10 +71,16 @@ export default function ProfileScreen() {
             {session.longestStreak > session.streak ? ` · longest ${session.longestStreak}` : ''}
           </Text>
         )}
-        <TouchableOpacity onPress={onSignOut} style={styles.signOut} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={16} color={Ember.textMuted} />
-          <Text style={styles.signOutText}>Sign out</Text>
-        </TouchableOpacity>
+        <View style={styles.actions}>
+          <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.action} activeOpacity={0.8}>
+            <Ionicons name="create-outline" size={16} color={Ember.textMuted} />
+            <Text style={styles.actionText}>Edit profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onSignOut} style={styles.action} activeOpacity={0.8}>
+            <Ionicons name="log-out-outline" size={16} color={Ember.textMuted} />
+            <Text style={styles.actionText}>Sign out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.tabs}>
@@ -110,27 +120,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Ember.bg },
   list: { paddingHorizontal: 18, paddingBottom: 170 },
   identity: { alignItems: 'center', paddingTop: 16, paddingBottom: 10 },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: Radius.tile,
-    alignItems: 'center',
-    justifyContent: 'center',
+  avatarWrap: {
     marginBottom: 12,
+    borderRadius: 32,
     shadowColor: '#f07828',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 18,
   },
-  avatarInitial: { color: Ember.onGradient, fontSize: 28, fontWeight: '700' },
   handle: { fontSize: 22, color: Ember.textPrimary },
   meta: { color: Ember.textMutedDeep, fontSize: 13, marginTop: 4 },
   streak: { color: Ember.emberLight, fontSize: 13, fontWeight: '700', marginTop: 8 },
-  signOut: {
+  actions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  action: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 14,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: Radius.chip,
@@ -138,7 +143,7 @@ const styles = StyleSheet.create({
     borderColor: Ember.border,
     backgroundColor: Ember.surface3,
   },
-  signOutText: { color: Ember.textMuted, fontSize: 13, fontWeight: '600' },
+  actionText: { color: Ember.textMuted, fontSize: 13, fontWeight: '600' },
   tabs: { flexDirection: 'row', gap: 8, paddingVertical: 12 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: Radius.segment },
   tabActive: { backgroundColor: Ember.surface3 },
