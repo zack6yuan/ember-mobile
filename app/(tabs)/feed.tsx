@@ -12,6 +12,7 @@ import { PostCard } from '@/components/PostCard';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, TAG_ORDER, type TagId } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
+import { emberGreeting, firstNameFromHandle } from '@/lib/greeting';
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export default function FeedScreen() {
 
   const posts = postsByTag(activeTag);
   const streak = session?.streak ?? 0;
+  const greeting = emberGreeting(firstNameFromHandle(session?.handle));
 
   // Filter chips: circles you've joined come first (filled), the rest follow
   // (outlined + dimmed) so every circle stays reachable without burying yours.
@@ -65,7 +67,7 @@ export default function FeedScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <EmberLogo size={26} />
+        <EmberLogo size={26} wordmark={greeting} />
         <View style={styles.headerRight}>
           {streak > 0 && (
             <View style={styles.streakChip}>

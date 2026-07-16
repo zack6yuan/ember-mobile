@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -15,7 +16,7 @@ import Animated, {
 
 import { Text } from '@/components/Text';
 import { PrimaryButton, SecondaryButton } from '@/components/PrimaryButton';
-import { Ember, EmberGradient } from '@/constants/theme';
+import { Ember } from '@/constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -119,9 +120,7 @@ export default function WelcomeScreen() {
         <View style={styles.logoWrap}>
           <Animated.View style={[styles.logoGlow, pulseStyle]} pointerEvents="none" />
           <Animated.View style={flickerStyle}>
-            <LinearGradient colors={EmberGradient} start={{ x: 0, y: 0 }} end={{ x: 0.4, y: 1 }} style={styles.logoTile}>
-              <Text style={styles.logoFlame}>🔥</Text>
-            </LinearGradient>
+            <Image source={require('@/assets/images/ember-logo.png')} style={styles.logoTile} contentFit="contain" />
           </Animated.View>
         </View>
 
@@ -163,23 +162,17 @@ const styles = StyleSheet.create({
   logoWrap: { marginBottom: 34, alignItems: 'center', justifyContent: 'center' },
   logoGlow: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255,138,61,0.45)',
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    backgroundColor: 'rgba(255,138,61,0.38)',
   },
   logoTile: {
-    width: 84,
-    height: 84,
-    borderRadius: 26,
+    width: 108,
+    height: 108,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#f07828',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 24,
   },
-  logoFlame: { fontSize: 42 },
   eyebrow: {
     color: Ember.ember,
     fontSize: 12,
