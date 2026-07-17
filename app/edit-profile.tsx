@@ -7,6 +7,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +19,7 @@ import { Ember, Radius } from '@/constants/theme';
 import { AVATAR_PRESETS } from '@/constants/avatars';
 import { useUser } from '@/store/UserContext';
 import { normalizeHandle, handleError } from '@/lib/handle';
+import { pickAvatar } from '@/lib/avatar-upload';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -25,20 +28,63 @@ export default function EditProfileScreen() {
 
   const [handle, setHandle] = useState(session?.handle ?? '');
   const [avatar, setAvatar] = useState(session?.avatar ?? 'initial');
+  // Photo state, both held as `data:image/jpeg;base64,…` URIs. `photoUrl` is the
+  // currently-saved one; a freshly picked `localPhoto` previews and is persisted
+  // to the profile doc only on Save.
+  const [photoUrl, setPhotoUrl] = useState(session?.avatarUrl ?? '');
+  const [localPhoto, setLocalPhoto] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const normalized = normalizeHandle(handle);
   const initial = normalized.charAt(0).toUpperCase();
   const error = handleError(normalized);
-  const changed = normalized !== session?.handle || avatar !== session?.avatar;
-  const canSave = !error && changed && !saving;
+  // The image shown in the preview + used as the avatar (a photo wins over presets).
+  const previewPhoto = localPhoto ?? (photoUrl || null);
+  const hasPhoto = !!previewPhoto;
+
+  const changed =
+    normalized !== session?.handle ||
+    avatar !== session?.avatar ||
+    localPhoto !== null ||
+    photoUrl !== (session?.avatarUrl ?? '');
+  const busy = saving || picking;
+  const canSave = !error && changed && !busy;
+
+  const onPickPhoto = async () => {
+    setPicking(true);
+    try {
+      const result = await pickAvatar();
+      if (result.status === 'picked') {
+        setLocalPhoto(result.dataUri);
+      } else if (result.status === 'denied') {
+        Alert.alert(
+          'Photo access needed',
+          'Allow photo access in Settings to upload an avatar.'
+        );
+      }
+    } catch {
+      Alert.alert('Couldn’t load that photo', 'Please try a different image.');
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  const onRemovePhoto = () => {
+    setLocalPhoto(null);
+    setPhotoUrl('');
+  };
 
   const onSave = async () => {
-    if (!canSave) return;
+    if (!canSave || !session) return;
     setSaving(true);
     try {
-      await updateProfile({ handle: normalized, avatar });
+      // The photo is already a data URI (from the picker) — persist it straight
+      // onto the profile doc. `previewPhoto` is null when there's no photo.
+      await updateProfile({ handle: normalized, avatar, avatarUrl: previewPhoto ?? '' });
       router.back();
+    } catch {
+      Alert.alert('Couldn’t save', 'Something went wrong saving your profile. Try again.');
     } finally {
       setSaving(false);
     }
@@ -50,32 +96,62 @@ export default function EditProfileScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={8} disabled={busy}>
           <Text style={styles.cancel}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.topTitle}>Edit profile</Text>
         <TouchableOpacity onPress={onSave} disabled={!canSave} hitSlop={8}>
-          <Text style={[styles.save, { color: canSave ? Ember.ember : Ember.disabled }]}>Save</Text>
+          {saving ? (
+            <ActivityIndicator size="small" color={Ember.ember} />
+          ) : (
+            <Text style={[styles.save, { color: canSave ? Ember.ember : Ember.disabled }]}>Save</Text>
+          )}
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Live preview of the selected avatar */}
         <View style={styles.preview}>
-          <PresetAvatar presetId={avatar} initial={initial} size={84} />
+          <PresetAvatar presetId={avatar} imageUrl={previewPhoto} initial={initial} size={84} />
           <Text serif style={styles.previewHandle}>
             @{normalized || 'you'}
           </Text>
         </View>
 
-        <Text style={styles.label}>Avatar</Text>
-        <View style={styles.grid}>
+        {/* Photo upload controls */}
+        <View style={styles.photoActions}>
+          <TouchableOpacity
+            onPress={onPickPhoto}
+            disabled={busy}
+            style={[styles.photoBtn, busy && styles.photoBtnDisabled]}
+            activeOpacity={0.85}
+          >
+            {picking ? (
+              <ActivityIndicator size="small" color={Ember.ember} />
+            ) : (
+              <Text style={styles.photoBtnText}>{hasPhoto ? 'Change photo' : 'Upload a photo'}</Text>
+            )}
+          </TouchableOpacity>
+          {hasPhoto ? (
+            <TouchableOpacity onPress={onRemovePhoto} disabled={busy} hitSlop={6} activeOpacity={0.7}>
+              <Text style={styles.removeText}>Remove</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <Text style={styles.label}>{hasPhoto ? 'Or pick a preset' : 'Avatar'}</Text>
+        <View style={[styles.grid, hasPhoto && styles.gridDimmed]}>
           {AVATAR_PRESETS.map((preset) => {
-            const selected = preset.id === avatar;
+            const selected = !hasPhoto && preset.id === avatar;
             return (
               <TouchableOpacity
                 key={preset.id}
-                onPress={() => setAvatar(preset.id)}
+                onPress={() => {
+                  // Choosing a preset clears any uploaded photo (presets are the fallback).
+                  setLocalPhoto(null);
+                  setPhotoUrl('');
+                  setAvatar(preset.id);
+                }}
                 activeOpacity={0.85}
                 style={[styles.gridItem, selected && styles.gridItemSelected]}
               >
@@ -122,8 +198,22 @@ const styles = StyleSheet.create({
   topTitle: { color: Ember.textMutedDeep, fontSize: 13, fontWeight: '600' },
   save: { fontSize: 15, fontWeight: '700' },
   scroll: { paddingHorizontal: 22, paddingTop: 10, paddingBottom: 60 },
-  preview: { alignItems: 'center', gap: 10, marginBottom: 26 },
+  preview: { alignItems: 'center', gap: 10, marginBottom: 18 },
   previewHandle: { fontSize: 20, color: Ember.textPrimary },
+  photoActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 26 },
+  photoBtn: {
+    minWidth: 150,
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Ember.ember,
+    backgroundColor: Ember.surface3,
+  },
+  photoBtnDisabled: { opacity: 0.6 },
+  photoBtnText: { color: Ember.ember, fontSize: 14, fontWeight: '700' },
+  removeText: { color: Ember.textMuted, fontSize: 13, fontWeight: '600' },
   label: {
     color: Ember.textMuted,
     fontSize: 12,
@@ -133,6 +223,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  gridDimmed: { opacity: 0.45 },
   gridItem: {
     padding: 3,
     borderRadius: 33,

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from '@/components/Text';
 import { Ember, EmberGradientAlt } from '@/constants/theme';
@@ -7,8 +8,9 @@ import { avatarPreset } from '@/constants/avatars';
 import type { Identity } from '@/store/PostsContext';
 
 /**
- * Identity avatar. Anonymous authors get a 🌙 tile; named authors get an
- * ember-gradient tile with their initial.
+ * Identity avatar shown on post/reply author rows. Anonymous authors get a 🌙
+ * tile; named authors get an ember-gradient tile with their initial. (Uploaded
+ * photos are profile-only — not denormalized here, to keep post docs small.)
  */
 export function Avatar({ identity, size = 24 }: { identity: Identity; size?: number }) {
   const radius = size / 2;
@@ -37,18 +39,31 @@ export function Avatar({ identity, size = 24 }: { identity: Identity; size?: num
 }
 
 /**
- * Renders a chosen preset avatar (profile screen + edit screen). Falls back to
- * the handle initial for the `initial` preset (or any preset without a glyph).
+ * Renders the user's avatar on the profile + edit screens. An uploaded photo
+ * (`imageUrl`) wins; otherwise it's the chosen preset, falling back to the
+ * handle initial for the `initial` preset (or any preset without a glyph).
  */
 export function PresetAvatar({
   presetId,
   initial,
+  imageUrl,
   size = 64,
 }: {
   presetId?: string | null;
   initial?: string;
+  imageUrl?: string | null;
   size?: number;
 }) {
+  if (imageUrl) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        contentFit="cover"
+      />
+    );
+  }
+
   const preset = avatarPreset(presetId);
   return (
     <LinearGradient
