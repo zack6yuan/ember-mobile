@@ -51,26 +51,30 @@ export default function ProfileScreen() {
   const header = (
     <View>
       <View style={styles.identity}>
-        <TouchableOpacity
-          style={styles.avatarWrap}
-          activeOpacity={0.85}
-          onPress={() => router.push('/edit-profile')}
-        >
-          <PresetAvatar presetId={session?.avatar} initial={initial} size={64} />
-        </TouchableOpacity>
-        <Text serif style={styles.handle}>
-          @{handle}
-        </Text>
-        <Text style={styles.meta}>
-          Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} ember
-          {(session?.embersShared ?? 0) === 1 ? '' : 's'} shared
-        </Text>
-        {!!session && session.streak > 0 && (
-          <Text style={styles.streak}>
-            🔥 {session.streak}-day streak
-            {session.longestStreak > session.streak ? ` · longest ${session.longestStreak}` : ''}
-          </Text>
-        )}
+        <View style={styles.identityRow}>
+          <TouchableOpacity
+            style={styles.avatarWrap}
+            activeOpacity={0.85}
+            onPress={() => router.push('/edit-profile')}
+          >
+            <PresetAvatar presetId={session?.avatar} imageUrl={session?.avatarUrl} initial={initial} size={64} />
+          </TouchableOpacity>
+          <View style={styles.identityText}>
+            <Text serif style={styles.handle}>
+              @{handle}
+            </Text>
+            <Text style={styles.meta}>
+              Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} ember
+              {(session?.embersShared ?? 0) === 1 ? '' : 's'} shared
+            </Text>
+            {!!session && session.streak > 0 && (
+              <Text style={styles.streak}>
+                🔥 {session.streak}-day streak
+                {session.longestStreak > session.streak ? ` · longest ${session.longestStreak}` : ''}
+              </Text>
+            )}
+          </View>
+        </View>
         <View style={styles.actions}>
           <TouchableOpacity onPress={() => router.push('/edit-profile')} style={styles.action} activeOpacity={0.8}>
             <Ionicons name="create-outline" size={16} color={Ember.textMuted} />
@@ -119,9 +123,10 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Ember.bg },
   list: { paddingHorizontal: 18, paddingBottom: 170 },
-  identity: { alignItems: 'center', paddingTop: 16, paddingBottom: 10 },
+  identity: { alignItems: 'stretch', paddingTop: 16, paddingBottom: 10 },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  identityText: { flex: 1, marginTop: 14 },
   avatarWrap: {
-    marginBottom: 12,
     borderRadius: 32,
     shadowColor: '#f07828',
     shadowOffset: { width: 0, height: 0 },
@@ -131,7 +136,7 @@ const styles = StyleSheet.create({
   handle: { fontSize: 22, color: Ember.textPrimary },
   meta: { color: Ember.textMutedDeep, fontSize: 13, marginTop: 4 },
   streak: { color: Ember.emberLight, fontSize: 13, fontWeight: '700', marginTop: 8 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
