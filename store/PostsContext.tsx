@@ -15,6 +15,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { reportContent, type ReportReasonId } from '@/lib/moderation';
 import { notify } from '@/lib/notifications';
 import { timeAgo } from '@/lib/time';
 import { useAuth } from '@/store/AuthContext';
@@ -38,13 +39,18 @@ export type TagId =
 export type Reply = {
   id: string;
   author: Identity;
+  authorUid?: string; // who wrote it (absent on legacy replies) — enables block/report
   body: string;
   createdAt: string; // display string, e.g. "2m"
 };
 
+/** A person the current user has blocked (name is captured at block time). */
+export type BlockedUser = { uid: string; name: string; blockedAt: number };
+
 export type Post = {
   id: string;
   author: Identity;
+  authorUid?: string; // who wrote it — enables block/report (absent on legacy posts)
   tag: TagId;
   body: string;
   hugs: number;
@@ -101,7 +107,7 @@ const cleanIdentity = (identity: Identity): Identity =>
   identity.mode === 'named' && identity.handle ? { mode: 'named', handle: identity.handle } : { mode: 'anonymous' };
 
 // --- Firestore document shapes (stored) — timestamps are epoch ms ------------
-type StoredReply = { id: string; author: Identity; body: string; createdAt: number };
+type StoredReply = { id: string; author: Identity; authorUid?: string; body: string; createdAt: number };
 type StoredPost = {
   id: string; // Firestore doc id (added on read)
   authorUid: string | null;
@@ -228,6 +234,16 @@ type PostsContextType = {
   addPost: (input: NewPostInput) => Promise<void>;
   /** Delete one of your own posts (owner-only, enforced by Firestore rules). */
   deletePost: (id: string) => void;
+  /** People the current user has blocked. */
+  blocked: BlockedUser[];
+  /** Hide everything from a person (their posts + replies vanish from your view). */
+  blockAuthor: (uid: string, name: string) => void;
+  /** Undo a block (from Profile → Blocked people). */
+  unblockAuthor: (uid: string) => void;
+  /** Report a post for review; also hides it from your own feed. */
+  reportPost: (postId: string, reason: ReportReasonId) => void;
+  /** Report a reply for review. */
+  reportReply: (postId: string, replyId: string, reason: ReportReasonId) => void;
 };
 
 const PostsContext = createContext<PostsContextType | undefined>(undefined);
@@ -239,6 +255,8 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [rawPosts, setRawPosts] = useState<StoredPost[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [communityDeltas, setCommunityDeltas] = useState<Record<string, number>>({});
+  const [blocked, setBlocked] = useState<BlockedUser[]>([]);
+  const [hiddenPostIds, setHiddenPostIds] = useState<Set<string>>(new Set());
   const [activeTag, setActiveTag] = useState<TagId>('venting');
   const seededRef = useRef(false);
 
@@ -300,29 +318,69 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return unsubscribe;
   }, [uid]);
 
+  // The current user's moderation state: blocked people + hidden posts (both
+  // private subcollections). Blocked authors and hidden posts are filtered out
+  // of everything the user sees.
+  useEffect(() => {
+    if (!uid) {
+      setBlocked([]);
+      setHiddenPostIds(new Set());
+      return;
+    }
+    const unsubBlocked = onSnapshot(
+      collection(db, 'users', uid, 'blocked'),
+      (snap) =>
+        setBlocked(
+          snap.docs
+            .map((d) => ({ uid: d.id, ...(d.data() as Omit<BlockedUser, 'uid'>) }))
+            .sort((a, b) => b.blockedAt - a.blockedAt)
+        ),
+      (error) => console.warn('Blocked listener error:', error)
+    );
+    const unsubHidden = onSnapshot(
+      collection(db, 'users', uid, 'hidden'),
+      (snap) => setHiddenPostIds(new Set(snap.docs.map((d) => d.id))),
+      (error) => console.warn('Hidden listener error:', error)
+    );
+    return () => {
+      unsubBlocked();
+      unsubHidden();
+    };
+  }, [uid]);
+
+  const blockedSet = useMemo(() => new Set(blocked.map((b) => b.uid)), [blocked]);
+
   // Map stored docs → the display `Post` shape (derives per-user state).
+  // Posts you've hidden or whose author you've blocked are dropped entirely, and
+  // replies from blocked authors are filtered out of the posts that remain.
   const posts = useMemo<Post[]>(
     () =>
-      rawPosts.map((r) => ({
-        id: r.id,
-        author: r.author,
-        tag: r.tag,
-        body: r.body,
-        hugs: r.hugs ?? 0,
-        hearts: r.hearts ?? 0,
-        replies: (r.replies ?? []).map((rp) => ({
-          id: rp.id,
-          author: rp.author,
-          body: rp.body,
-          createdAt: timeAgo(rp.createdAt),
+      rawPosts
+        .filter((r) => !hiddenPostIds.has(r.id) && !(r.authorUid && blockedSet.has(r.authorUid)))
+        .map((r) => ({
+          id: r.id,
+          author: r.author,
+          authorUid: r.authorUid ?? undefined,
+          tag: r.tag,
+          body: r.body,
+          hugs: r.hugs ?? 0,
+          hearts: r.hearts ?? 0,
+          replies: (r.replies ?? [])
+            .filter((rp) => !(rp.authorUid && blockedSet.has(rp.authorUid)))
+            .map((rp) => ({
+              id: rp.id,
+              author: rp.author,
+              authorUid: rp.authorUid,
+              body: rp.body,
+              createdAt: timeAgo(rp.createdAt),
+            })),
+          createdAt: timeAgo(r.createdAt),
+          mine: !!uid && r.authorUid === uid && !r.seeded,
+          saved: savedIds.has(r.id),
+          myHug: !!uid && (r.hugBy ?? []).includes(uid),
+          myHeart: !!uid && (r.heartBy ?? []).includes(uid),
         })),
-        createdAt: timeAgo(r.createdAt),
-        mine: !!uid && r.authorUid === uid && !r.seeded,
-        saved: savedIds.has(r.id),
-        myHug: !!uid && (r.hugBy ?? []).includes(uid),
-        myHeart: !!uid && (r.heartBy ?? []).includes(uid),
-      })),
-    [rawPosts, savedIds, uid]
+    [rawPosts, savedIds, uid, hiddenPostIds, blockedSet]
   );
 
   // Communities with live counts (baseline + membership delta, never negative).
@@ -379,6 +437,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const reply: StoredReply = {
       id: `r_${Date.now()}`,
       author,
+      authorUid: uid,
       body,
       createdAt: Date.now(),
     };
@@ -404,6 +463,52 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deletePost = (id: string) => {
     if (!uid) return;
     deleteDoc(doc(db, 'posts', id)).catch((e) => console.warn('Failed to delete post:', e));
+  };
+
+  // --- Moderation: block a person, and report content for review ---
+
+  const blockAuthor = (blockedUid: string, name: string) => {
+    if (!uid || blockedUid === uid) return;
+    setDoc(doc(db, 'users', uid, 'blocked', blockedUid), { name, blockedAt: Date.now() }).catch((e) =>
+      console.warn('Failed to block author:', e)
+    );
+  };
+
+  const unblockAuthor = (blockedUid: string) => {
+    if (!uid) return;
+    deleteDoc(doc(db, 'users', uid, 'blocked', blockedUid)).catch((e) =>
+      console.warn('Failed to unblock author:', e)
+    );
+  };
+
+  const hidePost = (postId: string) => {
+    if (!uid) return;
+    setDoc(doc(db, 'users', uid, 'hidden', postId), { hiddenAt: Date.now() }).catch((e) =>
+      console.warn('Failed to hide post:', e)
+    );
+  };
+
+  // Reporting a post files it for review and hides it from the reporter right
+  // away — you shouldn't have to keep looking at something you just flagged.
+  const reportPost = (postId: string, reason: ReportReasonId) => {
+    if (!uid) return;
+    const raw = rawPosts.find((p) => p.id === postId);
+    reportContent({ targetType: 'post', postId, reportedUid: raw?.authorUid ?? null, reason, reporterUid: uid });
+    hidePost(postId);
+  };
+
+  const reportReply = (postId: string, replyId: string, reason: ReportReasonId) => {
+    if (!uid) return;
+    const raw = rawPosts.find((p) => p.id === postId);
+    const reply = (raw?.replies ?? []).find((r) => r.id === replyId);
+    reportContent({
+      targetType: 'reply',
+      postId,
+      replyId,
+      reportedUid: reply?.authorUid ?? null,
+      reason,
+      reporterUid: uid,
+    });
   };
 
   const addPost = async ({ body, tag, identity }: NewPostInput) => {
@@ -444,6 +549,11 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addReply,
         addPost,
         deletePost,
+        blocked,
+        blockAuthor,
+        unblockAuthor,
+        reportPost,
+        reportReply,
       }}
     >
       {children}

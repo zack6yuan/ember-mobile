@@ -17,13 +17,14 @@ import { Text } from '@/components/Text';
 import { Avatar } from '@/components/Avatar';
 import { Ember, Radius } from '@/constants/theme';
 import { displayName } from '@/lib/identity';
+import { presentModerationMenu } from '@/lib/moderation';
 import { usePosts, type Reply } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 
-function ReplyRow({ reply }: { reply: Reply }) {
+function ReplyRow({ reply, onModerate }: { reply: Reply; onModerate?: () => void }) {
   const named = reply.author.mode === 'named';
   return (
-    <View style={styles.reply}>
+    <TouchableOpacity activeOpacity={onModerate ? 0.7 : 1} onLongPress={onModerate} delayLongPress={300} style={styles.reply}>
       <View style={styles.replyHead}>
         <Text style={[styles.replyName, { color: named ? Ember.ember : Ember.textSecondary }]}>
           {displayName(reply.author)}
@@ -31,7 +32,7 @@ function ReplyRow({ reply }: { reply: Reply }) {
         <Text style={styles.replyTime}>· {reply.createdAt}</Text>
       </View>
       <Text style={styles.replyBody}>{reply.body}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -39,12 +40,38 @@ export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getPost, toggleHug, toggleHeart, addReply, deletePost } = usePosts();
-  const { defaultIdentity } = useUser();
+  const { getPost, toggleHug, toggleHeart, addReply, deletePost, reportPost, reportReply, blockAuthor } = usePosts();
+  const { defaultIdentity, session } = useUser();
   const [text, setText] = useState('');
 
   const post = getPost(id);
   if (!post) return null;
+
+  // Report/block another person's post; leave the detail afterward since it's
+  // now hidden from this user.
+  const openPostMenu = () => {
+    if (!post.authorUid) return;
+    presentModerationMenu({
+      targetLabel: 'post',
+      onReport: (reason) => {
+        reportPost(post.id, reason);
+        router.back();
+      },
+      onBlock: () => {
+        blockAuthor(post.authorUid!, displayName(post.author));
+        router.back();
+      },
+    });
+  };
+
+  const moderateReply = (reply: Reply) => {
+    if (!reply.authorUid) return;
+    presentModerationMenu({
+      targetLabel: 'reply',
+      onReport: (reason) => reportReply(post.id, reply.id, reason),
+      onBlock: () => blockAuthor(reply.authorUid!, displayName(reply.author)),
+    });
+  };
 
   const send = () => {
     if (!text.trim()) return;
@@ -74,11 +101,15 @@ export default function PostDetailScreen() {
         </TouchableOpacity>
         <Text style={styles.tag}>#{post.tag}</Text>
         <View style={styles.topBarSpacer} />
-        {post.mine && (
+        {post.mine ? (
           <TouchableOpacity onPress={confirmDelete} hitSlop={10}>
             <Ionicons name="trash-outline" size={20} color={Ember.textMuted} />
           </TouchableOpacity>
-        )}
+        ) : post.authorUid ? (
+          <TouchableOpacity onPress={openPostMenu} hitSlop={10}>
+            <Ionicons name="ellipsis-horizontal" size={20} color={Ember.textMuted} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.authorRow}>
@@ -124,7 +155,12 @@ export default function PostDetailScreen() {
         ListHeaderComponent={header}
         contentContainerStyle={[styles.list, { paddingTop: insets.top + 4 }]}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => <ReplyRow reply={item} />}
+        renderItem={({ item }) => (
+          <ReplyRow
+            reply={item}
+            onModerate={item.authorUid && item.authorUid !== session?.uid ? () => moderateReply(item) : undefined}
+          />
+        )}
         ListEmptyComponent={<Text style={styles.noReplies}>No replies yet. Be the first to sit with them.</Text>}
       />
 

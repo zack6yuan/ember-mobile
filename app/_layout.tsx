@@ -78,6 +78,7 @@ function RootNavigator() {
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="post/[id]" />
+      <Stack.Screen name="blocked" />
       <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
       <Stack.Screen name="edit-profile" options={{ presentation: 'modal' }} />
       <Stack.Screen name="posted" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />

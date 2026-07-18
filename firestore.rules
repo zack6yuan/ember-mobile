@@ -11,6 +11,16 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
 
+      // Private moderation state: people you've blocked and posts you've hidden.
+      // Owner-only, like saved.
+      match /blocked/{blockedUid} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /hidden/{postId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
       // Warmth notifications. Only the owner may read them or mark them read;
       // any signed-in user may leave one (a hug/heart/reply on the owner's post),
       // but only as themselves — the actorUid must be their own uid.
@@ -45,6 +55,15 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly(['members']);
       allow update: if request.auth != null
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']);
+    }
+
+    // Moderation queue. Any signed-in user may file a report as themselves, but
+    // no client may read, edit, or delete reports — the queue is reviewed in the
+    // Firebase console, never enumerable from the app.
+    match /reports/{reportId} {
+      allow create: if request.auth != null
+                    && request.resource.data.reporterUid == request.auth.uid;
+      allow read, update, delete: if false;
     }
   }
 }
