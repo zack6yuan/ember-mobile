@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/Text';
 import { Avatar } from '@/components/Avatar';
 import { CrisisCard } from '@/components/CrisisCard';
+import { FollowButton } from '@/components/FollowButton';
 import { Ember, Radius } from '@/constants/theme';
 import { detectDistress } from '@/lib/crisis';
 import { displayName } from '@/lib/identity';
@@ -51,6 +52,8 @@ export default function PostDetailScreen() {
   if (!post) return null;
 
   const showCrisis = !crisisDismissed && detectDistress(post.body);
+  const canFollow =
+    post.author.mode === 'named' && !!post.author.handle && !post.mine && post.author.handle !== session?.handle;
 
   // Report/block another person's post; leave the detail afterward since it's
   // now hidden from this user.
@@ -121,6 +124,12 @@ export default function PostDetailScreen() {
         <Avatar identity={post.author} size={28} />
         <Text style={styles.authorName}>{displayName(post.author)}</Text>
         <Text style={styles.authorTime}>· {post.createdAt}</Text>
+        {canFollow && (
+          <>
+            <View style={styles.authorSpacer} />
+            <FollowButton handle={post.author.handle!} />
+          </>
+        )}
       </View>
 
       <Text serif style={styles.body}>
@@ -202,6 +211,7 @@ const styles = StyleSheet.create({
   topBarSpacer: { flex: 1 },
   tag: { color: Ember.ember, fontSize: 13, fontWeight: '700' },
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  authorSpacer: { flex: 1 },
   authorName: { color: '#e9d9cd', fontSize: 13, fontWeight: '600' },
   authorTime: { color: Ember.textMutedDeep, fontSize: 12 },
   body: { color: '#f3e7dd', fontSize: 19, lineHeight: 28, marginBottom: 18 },
