@@ -15,6 +15,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { notify } from '@/lib/notifications';
 import { timeAgo } from '@/lib/time';
 import { useAuth } from '@/store/AuthContext';
 
@@ -317,6 +318,19 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       [byField]: on ? arrayUnion(uid) : arrayRemove(uid),
       [countField]: increment(on ? 1 : -1),
     }).catch((e) => console.warn('Failed to toggle reaction:', e));
+    // Warm the author only when a reaction is added (not when it's taken back).
+    // Reactions stay anonymous, matching how they appear on the post itself.
+    if (on) {
+      notify({
+        recipientUid: raw.authorUid,
+        actorUid: uid,
+        type: field,
+        actor: { mode: 'anonymous' },
+        postId: id,
+        postBody: raw.body,
+        tag: raw.tag,
+      });
+    }
   };
 
   const toggleHug = (id: string) => toggleReaction(id, 'hug');
@@ -331,15 +345,29 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addReply = (postId: string, body: string, identity: Identity) => {
     if (!uid) return;
+    const raw = rawPosts.find((p) => p.id === postId);
+    const author = cleanIdentity(identity);
     const reply: StoredReply = {
       id: `r_${Date.now()}`,
-      author: cleanIdentity(identity),
+      author,
       body,
       createdAt: Date.now(),
     };
     updateDoc(doc(db, 'posts', postId), { replies: arrayUnion(reply) }).catch((e) =>
       console.warn('Failed to add reply:', e)
     );
+    if (raw) {
+      notify({
+        recipientUid: raw.authorUid,
+        actorUid: uid,
+        type: 'reply',
+        actor: author,
+        postId,
+        postBody: raw.body,
+        tag: raw.tag,
+        replyBody: body,
+      });
+    }
   };
 
   // Delete a post. The live listener drops it from local state automatically;
