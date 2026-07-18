@@ -238,6 +238,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [rawPosts, setRawPosts] = useState<StoredPost[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [communityDeltas, setCommunityDeltas] = useState<Record<string, number>>({});
   const [activeTag, setActiveTag] = useState<TagId>('venting');
   const seededRef = useRef(false);
 
@@ -259,6 +260,28 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       },
       (error) => console.warn('Posts listener error:', error)
+    );
+    return unsubscribe;
+  }, [uid]);
+
+  // Live membership deltas per community. Each `communities/{tag}` doc holds a
+  // net joins-minus-leaves count layered on top of the seeded baseline in
+  // COMMUNITIES, so the displayed number moves as people join and leave.
+  useEffect(() => {
+    if (!uid) {
+      setCommunityDeltas({});
+      return;
+    }
+    const unsubscribe = onSnapshot(
+      collection(db, 'communities'),
+      (snap) => {
+        const next: Record<string, number> = {};
+        snap.docs.forEach((d) => {
+          next[d.id] = (d.data() as { members?: number }).members ?? 0;
+        });
+        setCommunityDeltas(next);
+      },
+      (error) => console.warn('Communities listener error:', error)
     );
     return unsubscribe;
   }, [uid]);
@@ -300,6 +323,12 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         myHeart: !!uid && (r.heartBy ?? []).includes(uid),
       })),
     [rawPosts, savedIds, uid]
+  );
+
+  // Communities with live counts (baseline + membership delta, never negative).
+  const communities = useMemo<Community[]>(
+    () => COMMUNITIES.map((c) => ({ ...c, count: Math.max(0, c.count + (communityDeltas[c.tag] ?? 0)) })),
+    [communityDeltas]
   );
 
   const getPost = (id: string) => posts.find((p) => p.id === id);
@@ -402,7 +431,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <PostsContext.Provider
       value={{
         posts,
-        communities: COMMUNITIES,
+        communities,
         activeTag,
         setActiveTag,
         getPost,

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { arrayUnion, doc, getDoc, increment, setDoc } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, doc, getDoc, increment, setDoc } from 'firebase/firestore';
 import { updateProfile as updateAuthProfile } from 'firebase/auth';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/store/AuthContext';
@@ -49,6 +49,18 @@ function userDocRef(uid: string) {
   return doc(db, 'users', uid);
 }
 
+/**
+ * Nudge a community's live member count. `communities/{tag}.members` holds a net
+ * joins-minus-leaves delta on top of the seeded baseline (see PostsContext), so
+ * every join is +1 and every leave is -1. Fire-and-forget; a failed count never
+ * blocks the membership change the user actually cares about.
+ */
+function bumpCommunity(tag: TagId, delta: number) {
+  setDoc(doc(db, 'communities', tag), { members: increment(delta) }, { merge: true }).catch((e) =>
+    console.warn('Failed to update community count:', e)
+  );
+}
+
 /** A fresh, un-onboarded profile for a brand-new (or not-yet-provisioned) account. */
 function defaultProfile(uid: string, handle: string | null | undefined): Session {
   return {
@@ -85,6 +97,8 @@ type UserContextType = {
   incrementEmbersShared: () => void;
   /** Join a community (tapping an un-joined circle in the feed filters). */
   joinCircle: (tag: TagId) => void;
+  /** Leave a community you've joined (from the Circles tab). */
+  leaveCircle: (tag: TagId) => void;
   isLoading: boolean;
 };
 
@@ -171,6 +185,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createProfile = async (uid: string, handle: string) => {
     await persist(defaultProfile(uid, handle));
+    // Count the circles a brand-new account starts joined to so the live counts
+    // stay in step with each member's `joinedCircles` (join = +1, leave = -1).
+    DEFAULT_JOINED.forEach((tag) => bumpCommunity(tag, 1));
   };
 
   const finishOnboarding = async (mode: IdentityMode) => {
@@ -210,7 +227,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Join a community: optimistic local add + a server-authoritative arrayUnion
-  // (idempotent, so re-joining is a no-op both locally and remotely).
+  // (idempotent, so re-joining is a no-op both locally and remotely). The
+  // membership guard also keeps the community counter from double-counting.
   const joinCircle = (tag: TagId) => {
     if (!session || session.joinedCircles.includes(tag)) return;
     const uid = session.uid;
@@ -222,6 +240,23 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDoc(userDocRef(uid), { joinedCircles: arrayUnion(tag) }, { merge: true }).catch((e) =>
       console.warn('Failed to join circle:', e)
     );
+    bumpCommunity(tag, 1);
+  };
+
+  // Leave a community: the mirror of joinCircle. The guard ensures we only
+  // decrement the counter for a membership this account actually held.
+  const leaveCircle = (tag: TagId) => {
+    if (!session || !session.joinedCircles.includes(tag)) return;
+    const uid = session.uid;
+    setSession((prev) =>
+      prev?.uid === uid && prev.joinedCircles.includes(tag)
+        ? { ...prev, joinedCircles: prev.joinedCircles.filter((t) => t !== tag) }
+        : prev
+    );
+    setDoc(userDocRef(uid), { joinedCircles: arrayRemove(tag) }, { merge: true }).catch((e) =>
+      console.warn('Failed to leave circle:', e)
+    );
+    bumpCommunity(tag, -1);
   };
 
   // Daily check-in: once per app launch, bump the streak for a new local day.
@@ -262,6 +297,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProfile,
         incrementEmbersShared,
         joinCircle,
+        leaveCircle,
         isLoading,
       }}
     >
