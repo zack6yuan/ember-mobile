@@ -1,8 +1,9 @@
 import { addDoc, collection } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import type { ReactionId } from '@/lib/reactions';
 import type { Identity, TagId } from '@/store/PostsContext';
 
-export type NotificationType = 'hug' | 'heart' | 'reply';
+export type NotificationType = ReactionId | 'reply';
 
 /** Firestore document shape for a notification (stored under the recipient). */
 export type StoredNotification = {
