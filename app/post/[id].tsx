@@ -21,10 +21,19 @@ import { Ember, Radius } from '@/constants/theme';
 import { detectDistress } from '@/lib/crisis';
 import { displayName } from '@/lib/identity';
 import { presentModerationMenu } from '@/lib/moderation';
+import { REACTIONS, type ReactionId } from '@/lib/reactions';
 import { usePosts, type Reply } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 
-function ReplyRow({ reply, onModerate }: { reply: Reply; onModerate?: () => void }) {
+function ReplyRow({
+  reply,
+  onModerate,
+  onReact,
+}: {
+  reply: Reply;
+  onModerate?: () => void;
+  onReact: (reaction: ReactionId) => void;
+}) {
   const named = reply.author.mode === 'named';
   return (
     <TouchableOpacity activeOpacity={onModerate ? 0.7 : 1} onLongPress={onModerate} delayLongPress={300} style={styles.reply}>
@@ -35,6 +44,20 @@ function ReplyRow({ reply, onModerate }: { reply: Reply; onModerate?: () => void
         <Text style={styles.replyTime}>· {reply.createdAt}</Text>
       </View>
       <Text style={styles.replyBody}>{reply.body}</Text>
+      <View style={styles.replyReactions}>
+        {REACTIONS.map((r) => {
+          const count = reply.reactions[r.id] ?? 0;
+          const mine = reply.myReactions[r.id];
+          return (
+            <TouchableOpacity key={r.id} onPress={() => onReact(r.id)} hitSlop={6} activeOpacity={0.7}>
+              <Text style={[styles.replyReaction, mine && { color: r.color }]}>
+                {r.emoji}
+                {count > 0 ? ` ${count}` : ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -43,7 +66,8 @@ export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { getPost, toggleHug, toggleHeart, addReply, deletePost, reportPost, reportReply, blockAuthor } = usePosts();
+  const { getPost, toggleReaction, toggleReplyReaction, addReply, deletePost, reportPost, reportReply, blockAuthor } =
+    usePosts();
   const { defaultIdentity, session } = useUser();
   const [text, setText] = useState('');
   const [crisisDismissed, setCrisisDismissed] = useState(false);
@@ -143,20 +167,22 @@ export default function PostDetailScreen() {
       )}
 
       <View style={styles.reactions}>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.reactionBtn, post.myHug && styles.reactionActive]}
-          onPress={() => toggleHug(post.id)}
-        >
-          <Text style={styles.reactionText}>🫂 {post.myHug ? 'Held' : 'I hear you'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.reactionBtn, post.myHeart && styles.reactionActive]}
-          onPress={() => toggleHeart(post.id)}
-        >
-          <Text style={styles.reactionText}>❤️ {post.hearts}</Text>
-        </TouchableOpacity>
+        {REACTIONS.map((r) => {
+          const count = post.reactions[r.id] ?? 0;
+          const mine = post.myReactions[r.id];
+          return (
+            <TouchableOpacity
+              key={r.id}
+              activeOpacity={0.85}
+              style={[styles.reactionBtn, mine && styles.reactionActive]}
+              onPress={() => toggleReaction(post.id, r.id)}
+            >
+              <Text style={[styles.reactionText, mine && { color: r.color }]}>
+                {r.emoji} {count > 0 ? count : r.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.divider} />
@@ -178,6 +204,7 @@ export default function PostDetailScreen() {
         renderItem={({ item }) => (
           <ReplyRow
             reply={item}
+            onReact={(reaction) => toggleReplyReaction(post.id, item.id, reaction)}
             onModerate={item.authorUid && item.authorUid !== session?.uid ? () => moderateReply(item) : undefined}
           />
         )}
@@ -216,13 +243,13 @@ const styles = StyleSheet.create({
   authorTime: { color: Ember.textMutedDeep, fontSize: 12 },
   body: { color: '#f3e7dd', fontSize: 19, lineHeight: 28, marginBottom: 18 },
   crisisWrap: { marginBottom: 18 },
-  reactions: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+  reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
   reactionBtn: {
-    flex: 1,
     alignItems: 'center',
     backgroundColor: Ember.surface3,
     borderRadius: Radius.segment,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: 'transparent',
   },
@@ -234,6 +261,8 @@ const styles = StyleSheet.create({
   replyName: { fontSize: 12, fontWeight: '600' },
   replyTime: { color: Ember.textMutedDeep, fontSize: 11 },
   replyBody: { color: '#c9b9ae', fontSize: 13, lineHeight: 20 },
+  replyReactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 8 },
+  replyReaction: { color: '#9a8a80', fontSize: 12 },
   noReplies: { color: Ember.textMutedDeep, fontSize: 13, lineHeight: 20, paddingVertical: 6 },
   composer: {
     paddingHorizontal: 16,

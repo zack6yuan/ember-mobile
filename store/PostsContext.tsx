@@ -17,6 +17,7 @@ import {
 import { db } from '@/lib/firebase';
 import { reportContent, type ReportReasonId } from '@/lib/moderation';
 import { notify } from '@/lib/notifications';
+import { REACTIONS, reactionById, type ReactionId } from '@/lib/reactions';
 import { timeAgo } from '@/lib/time';
 import { useAuth } from '@/store/AuthContext';
 
@@ -42,6 +43,8 @@ export type Reply = {
   authorUid?: string; // who wrote it (absent on legacy replies) — enables block/report
   body: string;
   createdAt: string; // display string, e.g. "2m"
+  reactions: Record<ReactionId, number>; // count per warmth gesture
+  myReactions: Record<ReactionId, boolean>; // which ones the current user has left
 };
 
 /** A person the current user has blocked (name is captured at block time). */
@@ -53,14 +56,12 @@ export type Post = {
   authorUid?: string; // who wrote it — enables block/report (absent on legacy posts)
   tag: TagId;
   body: string;
-  hugs: number;
-  hearts: number;
+  reactions: Record<ReactionId, number>; // count per warmth gesture
+  myReactions: Record<ReactionId, boolean>; // which ones the current user has left
   replies: Reply[];
   createdAt: string; // display string, e.g. "4m"
   mine?: boolean; // authored by the current user (shown in their profile)
   saved?: boolean;
-  myHug?: boolean;
-  myHeart?: boolean;
 };
 
 export type Community = {
@@ -107,7 +108,16 @@ const cleanIdentity = (identity: Identity): Identity =>
   identity.mode === 'named' && identity.handle ? { mode: 'named', handle: identity.handle } : { mode: 'anonymous' };
 
 // --- Firestore document shapes (stored) — timestamps are epoch ms ------------
-type StoredReply = { id: string; author: Identity; authorUid?: string; body: string; createdAt: number };
+type StoredReply = {
+  id: string;
+  author: Identity;
+  authorUid?: string;
+  body: string;
+  createdAt: number;
+  // Who left each warmth gesture on this reply. Counts are derived from length,
+  // so replies (unlike posts) carry no seeded baseline.
+  reactBy?: Partial<Record<ReactionId, string[]>>;
+};
 type StoredPost = {
   id: string; // Firestore doc id (added on read)
   authorUid: string | null;
@@ -121,7 +131,18 @@ type StoredPost = {
   replies: StoredReply[];
   createdAt: number;
   seeded?: boolean; // demo content — never counted as the current user's own post
+  // Reaction fields beyond hug/heart are optional so legacy/seed posts read as 0.
+  // Read dynamically via each reaction's countField/byField (see lib/reactions).
+  candles?: number;
+  candleBy?: string[];
+  metoos?: number;
+  metooBy?: string[];
+  strengths?: number;
+  strengthBy?: string[];
 };
+
+/** Read a stored post's reaction field by its (string) name, coping with the dynamic key. */
+const field = (post: StoredPost, name: string): unknown => (post as Record<string, unknown>)[name];
 
 // --- Seed content (written once to an empty collection) ----------------------
 const MIN = 60_000;
@@ -134,6 +155,8 @@ const SEED_POSTS: SeedPost[] = [
     body: "Third night I can't sleep. Feels like everyone moved on with their lives and I'm just… stuck.",
     hugs: 34,
     hearts: 12,
+    candles: 15,
+    metoos: 22,
     createdAt: Date.now() - 4 * MIN,
     replies: [
       { id: 'r1', author: anon(), body: 'Stuck is still a place you can leave. Been there. It gets lighter.', createdAt: Date.now() - 2 * MIN },
@@ -147,6 +170,7 @@ const SEED_POSTS: SeedPost[] = [
     body: "Finally sent the email I'd been dreading for a month. Hands were shaking but I did it 🎉",
     hugs: 8,
     hearts: 51,
+    strengths: 30,
     createdAt: Date.now() - 20 * MIN,
     replies: [
       { id: 'r4', author: anon(), body: 'That first send is the hardest part. Proud of you.', createdAt: Date.now() - 12 * MIN },
@@ -159,6 +183,8 @@ const SEED_POSTS: SeedPost[] = [
     body: "Burnt out and pretending I'm fine at work. Anyone else running on empty?",
     hugs: 40,
     hearts: 23,
+    metoos: 33,
+    strengths: 12,
     createdAt: Date.now() - 18 * MIN,
     replies: [
       { id: 'r6', author: anon(), body: 'Running on empty here too. You’re not alone in it.', createdAt: Date.now() - 10 * MIN },
@@ -199,6 +225,8 @@ const SEED_POSTS: SeedPost[] = [
     body: 'Six months sober today. Told no one in my life yet, so I’m telling you first. 🕯️',
     hugs: 21,
     hearts: 140,
+    candles: 25,
+    strengths: 60,
     createdAt: Date.now() - 300 * MIN,
     replies: [
       { id: 'r8', author: anon(), body: 'Six months is enormous. Thank you for trusting us with it.', createdAt: Date.now() - 240 * MIN },
@@ -206,15 +234,36 @@ const SEED_POSTS: SeedPost[] = [
   },
 ];
 
+/** Empty who-reacted arrays for every reaction, so a fresh post has all fields present. */
+const emptyReactionBy = (): Record<string, string[]> =>
+  Object.fromEntries(REACTIONS.map((r) => [r.byField, [] as string[]]));
+
 /** Write the demo posts once, owned by the seeding user but flagged so they never show as "mine". */
 async function seedPosts(uid: string) {
   const batch = writeBatch(db);
   for (const seed of SEED_POSTS) {
     const ref = doc(collection(db, 'posts'));
-    batch.set(ref, { ...seed, authorUid: uid, hugBy: [], heartBy: [], seeded: true });
+    batch.set(ref, { ...emptyReactionBy(), ...seed, authorUid: uid, seeded: true });
   }
   await batch.commit();
 }
+
+// Coerce dynamically-read reaction fields (typed `unknown` via the index signature).
+const asArr = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : []);
+const asNum = (v: unknown): number => (typeof v === 'number' ? v : 0);
+
+/** Count per reaction for a reply, derived from its who-reacted lists. */
+const replyReactionCounts = (reactBy?: Partial<Record<ReactionId, string[]>>): Record<ReactionId, number> =>
+  Object.fromEntries(REACTIONS.map((r) => [r.id, (reactBy?.[r.id] ?? []).length])) as Record<ReactionId, number>;
+
+/** Which reactions the current user has left on a reply. */
+const replyMyReactions = (
+  reactBy: Partial<Record<ReactionId, string[]>> | undefined,
+  uid?: string
+): Record<ReactionId, boolean> =>
+  Object.fromEntries(
+    REACTIONS.map((r) => [r.id, !!uid && (reactBy?.[r.id] ?? []).includes(uid)])
+  ) as Record<ReactionId, boolean>;
 
 type NewPostInput = { body: string; tag: TagId; identity: Identity };
 
@@ -236,8 +285,10 @@ type PostsContextType = {
   unfollowAuthor: (handle: string) => void;
   myPosts: () => Post[];
   savedPosts: () => Post[];
-  toggleHug: (id: string) => void;
-  toggleHeart: (id: string) => void;
+  /** Add/remove one of the warmth reactions on a post. */
+  toggleReaction: (id: string, reaction: ReactionId) => void;
+  /** Add/remove a warmth reaction on a reply. */
+  toggleReplyReaction: (postId: string, replyId: string, reaction: ReactionId) => void;
   toggleSave: (id: string) => void;
   addReply: (postId: string, body: string, identity: Identity) => void;
   addPost: (input: NewPostInput) => Promise<void>;
@@ -387,8 +438,12 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           authorUid: r.authorUid ?? undefined,
           tag: r.tag,
           body: r.body,
-          hugs: r.hugs ?? 0,
-          hearts: r.hearts ?? 0,
+          reactions: Object.fromEntries(
+            REACTIONS.map((rx) => [rx.id, asNum(field(r, rx.countField))])
+          ) as Record<ReactionId, number>,
+          myReactions: Object.fromEntries(
+            REACTIONS.map((rx) => [rx.id, !!uid && asArr(field(r, rx.byField)).includes(uid)])
+          ) as Record<ReactionId, boolean>,
           replies: (r.replies ?? [])
             .filter((rp) => !(rp.authorUid && blockedSet.has(rp.authorUid)))
             .map((rp) => ({
@@ -397,12 +452,12 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               authorUid: rp.authorUid,
               body: rp.body,
               createdAt: timeAgo(rp.createdAt),
+              reactions: replyReactionCounts(rp.reactBy),
+              myReactions: replyMyReactions(rp.reactBy, uid),
             })),
           createdAt: timeAgo(r.createdAt),
           mine: !!uid && r.authorUid === uid && !r.seeded,
           saved: savedIds.has(r.id),
-          myHug: !!uid && (r.hugBy ?? []).includes(uid),
-          myHeart: !!uid && (r.heartBy ?? []).includes(uid),
         })),
     [rawPosts, savedIds, uid, hiddenPostIds, blockedSet]
   );
@@ -439,16 +494,15 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
-  const toggleReaction = (id: string, field: 'hug' | 'heart') => {
+  const toggleReaction = (id: string, reaction: ReactionId) => {
     if (!uid) return;
+    const def = reactionById(reaction);
     const raw = rawPosts.find((p) => p.id === id);
-    if (!raw) return;
-    const byField = field === 'hug' ? 'hugBy' : 'heartBy';
-    const countField = field === 'hug' ? 'hugs' : 'hearts';
-    const on = !(raw[byField] ?? []).includes(uid);
+    if (!def || !raw) return;
+    const on = !asArr(field(raw, def.byField)).includes(uid);
     updateDoc(doc(db, 'posts', id), {
-      [byField]: on ? arrayUnion(uid) : arrayRemove(uid),
-      [countField]: increment(on ? 1 : -1),
+      [def.byField]: on ? arrayUnion(uid) : arrayRemove(uid),
+      [def.countField]: increment(on ? 1 : -1),
     }).catch((e) => console.warn('Failed to toggle reaction:', e));
     // Warm the author only when a reaction is added (not when it's taken back).
     // Reactions stay anonymous, matching how they appear on the post itself.
@@ -456,7 +510,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       notify({
         recipientUid: raw.authorUid,
         actorUid: uid,
-        type: field,
+        type: reaction,
         actor: { mode: 'anonymous' },
         postId: id,
         postBody: raw.body,
@@ -465,8 +519,23 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const toggleHug = (id: string) => toggleReaction(id, 'hug');
-  const toggleHeart = (id: string) => toggleReaction(id, 'heart');
+  // React to a reply. Replies live inside the post's `replies` array, so this is
+  // a read-modify-write of the whole array (no arrayUnion on a nested element).
+  const toggleReplyReaction = (postId: string, replyId: string, reaction: ReactionId) => {
+    if (!uid) return;
+    const raw = rawPosts.find((p) => p.id === postId);
+    if (!raw) return;
+    const replies = (raw.replies ?? []).map((rp) => {
+      if (rp.id !== replyId) return rp;
+      const reactBy = { ...(rp.reactBy ?? {}) };
+      const list = reactBy[reaction] ?? [];
+      reactBy[reaction] = list.includes(uid) ? list.filter((u) => u !== uid) : [...list, uid];
+      return { ...rp, reactBy };
+    });
+    updateDoc(doc(db, 'posts', postId), { replies }).catch((e) =>
+      console.warn('Failed to toggle reply reaction:', e)
+    );
+  };
 
   const toggleSave = (id: string) => {
     if (!uid) return;
@@ -594,8 +663,8 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         unfollowAuthor,
         myPosts,
         savedPosts,
-        toggleHug,
-        toggleHeart,
+        toggleReaction,
+        toggleReplyReaction,
         toggleSave,
         addReply,
         addPost,

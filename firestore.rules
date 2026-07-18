@@ -56,7 +56,9 @@ service cloud.firestore {
                     && request.resource.data.authorUid == request.auth.uid;
       allow update: if request.auth != null
                     && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['hugBy', 'heartBy', 'hugs', 'hearts', 'replies']);
+                         .hasOnly(['hugBy', 'heartBy', 'hugs', 'hearts',
+                                   'candleBy', 'candles', 'metooBy', 'metoos',
+                                   'strengthBy', 'strengths', 'replies']);
       allow delete: if request.auth != null
                     && resource.data.authorUid == request.auth.uid;
     }

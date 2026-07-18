@@ -16,30 +16,27 @@ import { Text } from '@/components/Text';
 import { Ember } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import type { AppNotification, NotificationType } from '@/lib/notifications';
+import { REACTIONS, reactionById } from '@/lib/reactions';
 import { timeAgo } from '@/lib/time';
 import { useAuth } from '@/store/AuthContext';
 
 const EMOJI: Record<NotificationType, string> = {
-  hug: '🫂',
-  heart: '❤️',
+  ...(Object.fromEntries(REACTIONS.map((r) => [r.id, r.emoji])) as Record<NotificationType, string>),
   reply: '💬',
 };
 
 /** Build the warm one-liner for a notification, matching Ember's gentle voice. */
 function describe(n: AppNotification): { pre?: string; lead: string; leadColor?: string; post?: string } {
   const named = n.actor.mode === 'named' && n.actor.handle ? `@${n.actor.handle}` : null;
-  switch (n.type) {
-    case 'hug':
-      return { lead: 'Someone', post: ' sent a hug on your post' };
-    case 'heart':
-      return { lead: 'Someone', post: ' hearted your post' };
-    case 'reply':
-      return {
-        lead: named ?? 'Someone',
-        leadColor: named ? Ember.ember : undefined,
-        post: ` replied: “${n.replyBody ?? ''}”`,
-      };
+  if (n.type === 'reply') {
+    return {
+      lead: named ?? 'Someone',
+      leadColor: named ? Ember.ember : undefined,
+      post: ` replied: “${n.replyBody ?? ''}”`,
+    };
   }
+  // Every reaction reads "Someone <phrase>" — reactions stay anonymous.
+  return { lead: 'Someone', post: ` ${reactionById(n.type)?.notifPhrase ?? 'reacted to your post'}` };
 }
 
 export default function NotificationsScreen() {
@@ -104,7 +101,7 @@ export default function NotificationsScreen() {
               No warmth yet
             </Text>
             <Text style={styles.emptyBody}>
-              When someone sends a hug, a heart, or a reply to your posts, you’ll feel it here.
+              When someone sends warmth or a reply to your posts, you’ll feel it here.
             </Text>
           </View>
         }
