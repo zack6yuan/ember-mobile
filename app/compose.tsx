@@ -13,7 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { TagChip } from '@/components/TagChip';
+import { CrisisCard } from '@/components/CrisisCard';
 import { Ember, Radius } from '@/constants/theme';
+import { detectDistress } from '@/lib/crisis';
 import { usePosts, TAG_ORDER, type TagId, type IdentityMode } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 
@@ -26,8 +28,10 @@ export default function ComposeScreen() {
   const [body, setBody] = useState('');
   const [tag, setTag] = useState<TagId>(activeTag);
   const [mode, setMode] = useState<IdentityMode>(session?.defaultMode ?? 'anonymous');
+  const [crisisDismissed, setCrisisDismissed] = useState(false);
 
   const canPost = body.trim().length > 0;
+  const showCrisis = !crisisDismissed && detectDistress(body);
 
   const submit = () => {
     if (!canPost) return;
@@ -68,6 +72,12 @@ export default function ComposeScreen() {
           textAlignVertical="top"
         />
       </ScrollView>
+
+      {showCrisis && (
+        <View style={styles.crisisWrap}>
+          <CrisisCard onDismiss={() => setCrisisDismissed(true)} />
+        </View>
+      )}
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <Text style={styles.label}>Post to</Text>
@@ -124,6 +134,7 @@ const styles = StyleSheet.create({
     fontFamily: 'HankenGrotesk_400Regular',
     minHeight: 160,
   },
+  crisisWrap: { paddingHorizontal: 20, paddingBottom: 12 },
   footer: { paddingHorizontal: 20, gap: 14 },
   label: {
     color: Ember.textMuted,

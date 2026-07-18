@@ -15,7 +15,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { Avatar } from '@/components/Avatar';
+import { CrisisCard } from '@/components/CrisisCard';
 import { Ember, Radius } from '@/constants/theme';
+import { detectDistress } from '@/lib/crisis';
 import { displayName } from '@/lib/identity';
 import { presentModerationMenu } from '@/lib/moderation';
 import { usePosts, type Reply } from '@/store/PostsContext';
@@ -43,9 +45,12 @@ export default function PostDetailScreen() {
   const { getPost, toggleHug, toggleHeart, addReply, deletePost, reportPost, reportReply, blockAuthor } = usePosts();
   const { defaultIdentity, session } = useUser();
   const [text, setText] = useState('');
+  const [crisisDismissed, setCrisisDismissed] = useState(false);
 
   const post = getPost(id);
   if (!post) return null;
+
+  const showCrisis = !crisisDismissed && detectDistress(post.body);
 
   // Report/block another person's post; leave the detail afterward since it's
   // now hidden from this user.
@@ -122,6 +127,12 @@ export default function PostDetailScreen() {
         {post.body}
       </Text>
 
+      {showCrisis && (
+        <View style={styles.crisisWrap}>
+          <CrisisCard onDismiss={() => setCrisisDismissed(true)} />
+        </View>
+      )}
+
       <View style={styles.reactions}>
         <TouchableOpacity
           activeOpacity={0.85}
@@ -194,6 +205,7 @@ const styles = StyleSheet.create({
   authorName: { color: '#e9d9cd', fontSize: 13, fontWeight: '600' },
   authorTime: { color: Ember.textMutedDeep, fontSize: 12 },
   body: { color: '#f3e7dd', fontSize: 19, lineHeight: 28, marginBottom: 18 },
+  crisisWrap: { marginBottom: 18 },
   reactions: { flexDirection: 'row', gap: 8, marginBottom: 18 },
   reactionBtn: {
     flex: 1,
