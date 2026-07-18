@@ -9,6 +9,7 @@ import { Text } from '@/components/Text';
 import { EmberLogo } from '@/components/EmberLogo';
 import { TagChip } from '@/components/TagChip';
 import { PostCard } from '@/components/PostCard';
+import { FeedHearth } from '@/components/FeedHearth';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, TAG_ORDER, type TagId } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
@@ -107,6 +108,7 @@ export default function FeedScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={forYou ? null : <FeedHearth />}
         renderItem={({ item }) => <PostCard id={item.id} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListEmptyComponent={
