@@ -14,6 +14,7 @@ import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, TAG_ORDER, type TagId } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 import { emberGreeting, firstNameFromHandle } from '@/lib/greeting';
+import { feedBackdrop } from '@/lib/timeTheme';
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -24,6 +25,8 @@ export default function FeedScreen() {
   const posts = forYou ? forYouPosts() : postsByTag(activeTag);
   const streak = session?.streak ?? 0;
   const greeting = emberGreeting(firstNameFromHandle(session?.handle));
+  // Background warmth shifts with the hour — deepest and coziest late at night.
+  const backdrop = feedBackdrop();
 
   // Filter chips: circles you've joined come first (filled), the rest follow
   // (outlined + dimmed) so every circle stays reachable without burying yours.
@@ -65,7 +68,12 @@ export default function FeedScreen() {
   useEffect(scrollActiveIntoView, [activeTag]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <LinearGradient
+      colors={backdrop}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={[styles.container, { paddingTop: insets.top }]}
+    >
       {/* Header */}
       <View style={styles.header}>
         <EmberLogo size={26} wordmark={greeting} />
@@ -132,12 +140,12 @@ export default function FeedScreen() {
           <Text style={styles.fabIcon}>✍️</Text>
         </LinearGradient>
       </TouchableOpacity>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Ember.bg },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
