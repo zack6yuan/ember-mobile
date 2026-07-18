@@ -8,7 +8,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
@@ -22,6 +22,7 @@ import { useUser } from '@/store/UserContext';
 export default function ComposeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { prompt } = useLocalSearchParams<{ prompt?: string }>();
   const { addPost, activeTag, setActiveTag } = usePosts();
   const { session, anonIdentity, namedIdentity, incrementEmbersShared } = useUser();
 
@@ -59,7 +60,7 @@ export default function ComposeScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text serif style={styles.prompt}>
-          What&apos;s on your heart?
+          {prompt ? prompt : 'What’s on your heart?'}
         </Text>
         <TextInput
           style={styles.input}

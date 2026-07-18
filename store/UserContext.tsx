@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { arrayRemove, arrayUnion, doc, getDoc, increment, setDoc } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, getDoc, increment, onSnapshot, setDoc } from 'firebase/firestore';
 import { updateProfile as updateAuthProfile } from 'firebase/auth';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/store/AuthContext';
@@ -8,6 +8,9 @@ import type { Identity, IdentityMode, TagId } from '@/store/PostsContext';
 
 /** Circles a brand-new account starts joined to. Everything else is discoverable. */
 export const DEFAULT_JOINED: TagId[] = ['venting', 'wins', 'advice'];
+
+/** One day's mood check-in (doc id is the local YYYY-MM-DD date). */
+export type MoodEntry = { date: string; mood: string };
 
 /**
  * The signed-in person's Ember profile, stored at `users/{uid}` in Firestore.
@@ -99,6 +102,12 @@ type UserContextType = {
   joinCircle: (tag: TagId) => void;
   /** Leave a community you've joined (from the Circles tab). */
   leaveCircle: (tag: TagId) => void;
+  /** The person's mood check-ins, newest first. */
+  moods: MoodEntry[];
+  /** Today's recorded mood id, or undefined if not checked in yet. */
+  todayMood: string | undefined;
+  /** Record (or change) today's mood check-in. */
+  setTodayMood: (mood: string) => void;
   isLoading: boolean;
 };
 
@@ -107,6 +116,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
+  const [moods, setMoods] = useState<MoodEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -173,6 +183,36 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cancelled = true;
     };
   }, [user]);
+
+  // Live mood check-ins (private subcollection). Newest day first.
+  useEffect(() => {
+    if (!user) {
+      setMoods([]);
+      return;
+    }
+    const unsubscribe = onSnapshot(
+      collection(db, 'users', user.uid, 'moods'),
+      (snap) => {
+        const entries = snap.docs.map((d) => ({ date: d.id, mood: (d.data() as { mood: string }).mood }));
+        entries.sort((a, b) => b.date.localeCompare(a.date));
+        setMoods(entries);
+      },
+      (error) => console.warn('Moods listener error:', error)
+    );
+    return unsubscribe;
+  }, [user]);
+
+  const todayMood = moods.find((m) => m.date === localDateStr())?.mood;
+
+  const setTodayMood = (mood: string) => {
+    if (!session) return;
+    const date = localDateStr();
+    // Optimistic: reflect the pick immediately, then persist.
+    setMoods((prev) => [{ date, mood }, ...prev.filter((m) => m.date !== date)]);
+    setDoc(doc(db, 'users', session.uid, 'moods', date), { mood, at: Date.now() }).catch((e) =>
+      console.warn('Failed to save mood:', e)
+    );
+  };
 
   const persist = async (next: Session) => {
     setSession(next);
@@ -298,6 +338,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         incrementEmbersShared,
         joinCircle,
         leaveCircle,
+        moods,
+        todayMood,
+        setTodayMood,
         isLoading,
       }}
     >

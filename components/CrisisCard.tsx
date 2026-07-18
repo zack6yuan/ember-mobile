@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { Linking, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -11,6 +12,7 @@ import { Ember, Radius } from '@/constants/theme';
  * Resources are US-first (988) with an international fallback.
  */
 export function CrisisCard({ onDismiss }: { onDismiss?: () => void }) {
+  const router = useRouter();
   const open = (url: string) => Linking.openURL(url).catch(() => {});
 
   return (
@@ -37,6 +39,11 @@ export function CrisisCard({ onDismiss }: { onDismiss?: () => void }) {
       <TouchableOpacity style={styles.secondary} activeOpacity={0.85} onPress={() => open('sms:988')}>
         <Ionicons name="chatbubble-ellipses-outline" size={14} color={Ember.ember} />
         <Text style={styles.secondaryText}>Text 988 instead</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondary} activeOpacity={0.85} onPress={() => router.push('/breathe')}>
+        <Ionicons name="leaf-outline" size={14} color={Ember.ember} />
+        <Text style={styles.secondaryText}>Take a breath with us</Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => open('https://findahelpline.com')} hitSlop={6}>

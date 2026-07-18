@@ -26,6 +26,16 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
 
+      // Private daily mood check-ins (doc id = date) and journal entries.
+      // Owner-only — no one else can read or write them.
+      match /moods/{date} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      match /journal/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
       // Warmth notifications. Only the owner may read them or mark them read;
       // any signed-in user may leave one (a hug/heart/reply on the owner's post),
       // but only as themselves — the actorUid must be their own uid.
