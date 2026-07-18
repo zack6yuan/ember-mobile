@@ -17,10 +17,10 @@ import { emberGreeting, firstNameFromHandle } from '@/lib/greeting';
 export default function FeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { postsByTag, activeTag, setActiveTag } = usePosts();
+  const { postsByTag, activeTag, setActiveTag, forYou, setForYou, forYouPosts } = usePosts();
   const { session, joinCircle } = useUser();
 
-  const posts = postsByTag(activeTag);
+  const posts = forYou ? forYouPosts() : postsByTag(activeTag);
   const streak = session?.streak ?? 0;
   const greeting = emberGreeting(firstNameFromHandle(session?.handle));
 
@@ -40,7 +40,7 @@ export default function FeedScreen() {
     <TagChip
       key={tag}
       label={`#${tag}`}
-      active={activeTag === tag}
+      active={!forYou && activeTag === tag}
       unjoined={!joined.includes(tag)}
       onPress={() => selectTag(tag)}
       onLayout={(e) => {
@@ -92,6 +92,8 @@ export default function FeedScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chips}
         >
+          <TagChip label="Following" active={forYou} onPress={() => setForYou(true)} />
+          <View style={styles.chipDivider} />
           {joinedTags.map(renderChip)}
           {joinedTags.length > 0 && unjoinedTags.length > 0 && (
             <View style={styles.chipDivider} />
@@ -109,7 +111,11 @@ export default function FeedScreen() {
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No posts here yet. Be the first to light one. 🔥</Text>
+            <Text style={styles.emptyText}>
+              {forYou
+                ? 'Follow people to fill your Following feed. Tap “Follow” on anyone posting under a name. ✨'
+                : 'No posts here yet. Be the first to light one. 🔥'}
+            </Text>
           </View>
         }
       />

@@ -223,8 +223,17 @@ type PostsContextType = {
   communities: Community[];
   activeTag: TagId;
   setActiveTag: (tag: TagId) => void;
+  /** Whether the feed is showing the personalized "For you" view. */
+  forYou: boolean;
+  setForYou: (on: boolean) => void;
   getPost: (id: string) => Post | undefined;
   postsByTag: (tag: TagId) => Post[];
+  /** Named posts from the people you follow (newest first). */
+  forYouPosts: () => Post[];
+  /** Follow / unfollow a named author by handle, and check follow state. */
+  isFollowing: (handle: string) => boolean;
+  followAuthor: (handle: string) => void;
+  unfollowAuthor: (handle: string) => void;
   myPosts: () => Post[];
   savedPosts: () => Post[];
   toggleHug: (id: string) => void;
@@ -257,8 +266,16 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [communityDeltas, setCommunityDeltas] = useState<Record<string, number>>({});
   const [blocked, setBlocked] = useState<BlockedUser[]>([]);
   const [hiddenPostIds, setHiddenPostIds] = useState<Set<string>>(new Set());
-  const [activeTag, setActiveTag] = useState<TagId>('venting');
+  const [followingHandles, setFollowingHandles] = useState<Set<string>>(new Set());
+  const [activeTag, setActiveTagState] = useState<TagId>('venting');
+  const [forYou, setForYou] = useState(false);
   const seededRef = useRef(false);
+
+  // Selecting a community tag always leaves the "For you" view.
+  const setActiveTag = (tag: TagId) => {
+    setActiveTagState(tag);
+    setForYou(false);
+  };
 
   // Live feed. Only subscribe when signed in (reads require auth).
   useEffect(() => {
@@ -325,8 +342,14 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!uid) {
       setBlocked([]);
       setHiddenPostIds(new Set());
+      setFollowingHandles(new Set());
       return;
     }
+    const unsubFollowing = onSnapshot(
+      collection(db, 'users', uid, 'following'),
+      (snap) => setFollowingHandles(new Set(snap.docs.map((d) => d.id))),
+      (error) => console.warn('Following listener error:', error)
+    );
     const unsubBlocked = onSnapshot(
       collection(db, 'users', uid, 'blocked'),
       (snap) =>
@@ -343,6 +366,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       (error) => console.warn('Hidden listener error:', error)
     );
     return () => {
+      unsubFollowing();
       unsubBlocked();
       unsubHidden();
     };
@@ -393,6 +417,27 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const postsByTag = (tag: TagId) => posts.filter((p) => p.tag === tag);
   const myPosts = () => posts.filter((p) => p.mine);
   const savedPosts = () => posts.filter((p) => p.saved);
+
+  // The "For you" feed: only *named* posts from people you follow, so following
+  // someone never de-anonymizes the posts they chose to share anonymously.
+  const forYouPosts = () =>
+    posts.filter((p) => p.author.mode === 'named' && p.author.handle && followingHandles.has(p.author.handle));
+
+  const isFollowing = (handle: string) => followingHandles.has(handle);
+
+  const followAuthor = (handle: string) => {
+    if (!uid || !handle) return;
+    setDoc(doc(db, 'users', uid, 'following', handle), { followedAt: Date.now() }).catch((e) =>
+      console.warn('Failed to follow:', e)
+    );
+  };
+
+  const unfollowAuthor = (handle: string) => {
+    if (!uid || !handle) return;
+    deleteDoc(doc(db, 'users', uid, 'following', handle)).catch((e) =>
+      console.warn('Failed to unfollow:', e)
+    );
+  };
 
   const toggleReaction = (id: string, field: 'hug' | 'heart') => {
     if (!uid) return;
@@ -539,8 +584,14 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         communities,
         activeTag,
         setActiveTag,
+        forYou,
+        setForYou,
         getPost,
         postsByTag,
+        forYouPosts,
+        isFollowing,
+        followAuthor,
+        unfollowAuthor,
         myPosts,
         savedPosts,
         toggleHug,
