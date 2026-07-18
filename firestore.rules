@@ -10,6 +10,15 @@ service cloud.firestore {
       match /saved/{postId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
+
+      // Warmth notifications. Only the owner may read them or mark them read;
+      // any signed-in user may leave one (a hug/heart/reply on the owner's post),
+      // but only as themselves — the actorUid must be their own uid.
+      match /notifications/{notifId} {
+        allow read, update, delete: if request.auth != null && request.auth.uid == uid;
+        allow create: if request.auth != null
+                      && request.resource.data.actorUid == request.auth.uid;
+      }
     }
 
     // Posts are readable by any signed-in user. You may only create a post as
