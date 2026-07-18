@@ -80,6 +80,10 @@ export default function ProfileScreen() {
             <Ionicons name="create-outline" size={16} color={Ember.textMuted} />
             <Text style={styles.actionText}>Edit profile</Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/blocked')} style={styles.action} activeOpacity={0.8}>
+            <Ionicons name="shield-outline" size={16} color={Ember.textMuted} />
+            <Text style={styles.actionText}>Blocked</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={onSignOut} style={styles.action} activeOpacity={0.8}>
             <Ionicons name="log-out-outline" size={16} color={Ember.textMuted} />
             <Text style={styles.actionText}>Sign out</Text>
@@ -136,7 +140,7 @@ const styles = StyleSheet.create({
   handle: { fontSize: 22, color: Ember.textPrimary },
   meta: { color: Ember.textMutedDeep, fontSize: 13, marginTop: 4 },
   streak: { color: Ember.emberLight, fontSize: 13, fontWeight: '700', marginTop: 8 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
