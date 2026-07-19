@@ -17,6 +17,7 @@ import { Text } from '@/components/Text';
 import { Avatar } from '@/components/Avatar';
 import { CrisisCard } from '@/components/CrisisCard';
 import { FollowButton } from '@/components/FollowButton';
+import { ReactionButton } from '@/components/ReactionButton';
 import { Ember, Radius } from '@/constants/theme';
 import { detectDistress } from '@/lib/crisis';
 import { displayName } from '@/lib/identity';
@@ -47,14 +48,16 @@ function ReplyRow({
       <View style={styles.replyReactions}>
         {REACTIONS.map((r) => {
           const count = reply.reactions[r.id] ?? 0;
-          const mine = reply.myReactions[r.id];
           return (
-            <TouchableOpacity key={r.id} onPress={() => onReact(r.id)} hitSlop={6} activeOpacity={0.7}>
-              <Text style={[styles.replyReaction, mine && { color: r.color }]}>
-                {r.emoji}
-                {count > 0 ? ` ${count}` : ''}
-              </Text>
-            </TouchableOpacity>
+            <ReactionButton
+              key={r.id}
+              emoji={r.emoji}
+              label={count > 0 ? String(count) : ''}
+              active={reply.myReactions[r.id]}
+              activeColor={r.color}
+              onToggle={() => onReact(r.id)}
+              textStyle={styles.replyReaction}
+            />
           );
         })}
       </View>
@@ -171,16 +174,16 @@ export default function PostDetailScreen() {
           const count = post.reactions[r.id] ?? 0;
           const mine = post.myReactions[r.id];
           return (
-            <TouchableOpacity
+            <ReactionButton
               key={r.id}
-              activeOpacity={0.85}
-              style={[styles.reactionBtn, mine && styles.reactionActive]}
-              onPress={() => toggleReaction(post.id, r.id)}
-            >
-              <Text style={[styles.reactionText, mine && { color: r.color }]}>
-                {r.emoji} {count > 0 ? count : r.label}
-              </Text>
-            </TouchableOpacity>
+              emoji={r.emoji}
+              label={count > 0 ? String(count) : r.label}
+              active={mine}
+              activeColor={r.color}
+              onToggle={() => toggleReaction(post.id, r.id)}
+              containerStyle={[styles.reactionBtn, mine && styles.reactionActive]}
+              textStyle={styles.reactionText}
+            />
           );
         })}
       </View>
