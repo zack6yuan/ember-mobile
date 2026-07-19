@@ -13,6 +13,7 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
+import { EmptyState } from '@/components/EmptyState';
 import { Ember } from '@/constants/theme';
 import { db } from '@/lib/firebase';
 import type { AppNotification, NotificationType } from '@/lib/notifications';
@@ -95,15 +96,12 @@ export default function NotificationsScreen() {
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={styles.divider} />}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🕯️</Text>
-            <Text serif style={styles.emptyTitle}>
-              No warmth yet
-            </Text>
-            <Text style={styles.emptyBody}>
-              When someone sends warmth or a reply to your posts, you’ll feel it here.
-            </Text>
-          </View>
+          <EmptyState
+            fill
+            glyph="🕯️"
+            title="No warmth yet"
+            body="When someone sends warmth or a reply to your posts, you’ll feel it here."
+          />
         }
         renderItem={({ item }) => {
           const { pre, lead, leadColor, post } = describe(item);
@@ -147,8 +145,4 @@ const styles = StyleSheet.create({
   lead: { fontWeight: '700' },
   context: { color: Ember.textMutedDeep, fontSize: 12, marginTop: 4 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Ember.ember, marginTop: 6 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, gap: 10 },
-  emptyEmoji: { fontSize: 34 },
-  emptyTitle: { fontSize: 22, color: Ember.textPrimary },
-  emptyBody: { color: Ember.textMuted, fontSize: 14, lineHeight: 21, textAlign: 'center' },
 });
