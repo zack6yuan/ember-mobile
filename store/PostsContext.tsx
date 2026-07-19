@@ -270,6 +270,10 @@ type NewPostInput = { body: string; tag: TagId; identity: Identity };
 type PostsContextType = {
   posts: Post[];
   communities: Community[];
+  /** True until the first batch of posts arrives — drives the feed skeletons. */
+  loading: boolean;
+  /** Re-pull the feed from the server; resolves once a fresh snapshot lands. */
+  refresh: () => Promise<void>;
   activeTag: TagId;
   setActiveTag: (tag: TagId) => void;
   /** Whether the feed is showing the personalized "For you" view. */
@@ -320,7 +324,18 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [followingHandles, setFollowingHandles] = useState<Set<string>>(new Set());
   const [activeTag, setActiveTagState] = useState<TagId>('venting');
   const [forYou, setForYou] = useState(false);
+  const [loading, setLoading] = useState(true);
   const seededRef = useRef(false);
+
+  // Pull-to-refresh re-subscribes the feed (bumping this nonce) and resolves the
+  // returned promise once the fresh server snapshot arrives.
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const refreshResolve = useRef<(() => void) | null>(null);
+  const refresh = () =>
+    new Promise<void>((resolve) => {
+      refreshResolve.current = resolve;
+      setRefreshNonce((n) => n + 1);
+    });
 
   // Selecting a community tag always leaves the "For you" view.
   const setActiveTag = (tag: TagId) => {
@@ -328,10 +343,19 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setForYou(false);
   };
 
-  // Live feed. Only subscribe when signed in (reads require auth).
+  // Resolve any in-flight pull-to-refresh, and stop showing skeletons.
+  const settle = () => {
+    setLoading(false);
+    refreshResolve.current?.();
+    refreshResolve.current = null;
+  };
+
+  // Live feed. Only subscribe when signed in (reads require auth). Re-runs on
+  // `refreshNonce` so pull-to-refresh forces a fresh server round-trip.
   useEffect(() => {
     if (!uid) {
       setRawPosts([]);
+      settle();
       return;
     }
     const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
@@ -339,16 +363,24 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       q,
       (snap) => {
         setRawPosts(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredPost, 'id'>) })));
+        // Skeletons clear on the first delivery; a pull-to-refresh only settles
+        // once the authoritative server snapshot (not the cache) comes back.
+        if (!snap.metadata.fromCache) settle();
+        else setLoading(false);
         // Seed once, only against a confirmed-empty (server, not cached) collection.
         if (!snap.metadata.fromCache && snap.empty && !seededRef.current) {
           seededRef.current = true;
           seedPosts(uid).catch((e) => console.warn('Failed to seed posts:', e));
         }
       },
-      (error) => console.warn('Posts listener error:', error)
+      (error) => {
+        console.warn('Posts listener error:', error);
+        settle();
+      }
     );
     return unsubscribe;
-  }, [uid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, refreshNonce]);
 
   // Live membership deltas per community. Each `communities/{tag}` doc holds a
   // net joins-minus-leaves count layered on top of the seeded baseline in
@@ -651,6 +683,8 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       value={{
         posts,
         communities,
+        loading,
+        refresh,
         activeTag,
         setActiveTag,
         forYou,

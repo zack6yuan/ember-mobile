@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { EmberLogo } from '@/components/EmberLogo';
 import { TagChip } from '@/components/TagChip';
 import { PostCard } from '@/components/PostCard';
 import { FeedHearth } from '@/components/FeedHearth';
+import { FeedSkeleton } from '@/components/PostCardSkeleton';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, TAG_ORDER, type TagId } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
@@ -19,8 +21,20 @@ import { feedBackdrop } from '@/lib/timeTheme';
 export default function FeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { postsByTag, activeTag, setActiveTag, forYou, setForYou, forYouPosts } = usePosts();
+  const { postsByTag, activeTag, setActiveTag, forYou, setForYou, forYouPosts, loading, refresh } = usePosts();
   const { session, joinCircle } = useUser();
+
+  // Ember pull-to-refresh: a haptic tap on release, then hold the spinner long
+  // enough to feel deliberate (min ~700ms) but never hang if the server is slow.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+    const minSpin = new Promise((r) => setTimeout(r, 700));
+    const cap = new Promise((r) => setTimeout(r, 4000));
+    await Promise.all([Promise.race([refresh(), cap]), minSpin]);
+    setRefreshing(false);
+  }, [refresh]);
 
   const posts = forYou ? forYouPosts() : postsByTag(activeTag);
   const streak = session?.streak ?? 0;
@@ -116,17 +130,30 @@ export default function FeedScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Ember.ember}
+            colors={[Ember.ember]}
+            progressBackgroundColor={Ember.surface}
+          />
+        }
         ListHeaderComponent={forYou ? null : <FeedHearth />}
         renderItem={({ item }) => <PostCard id={item.id} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              {forYou
-                ? 'Follow people to fill your Following feed. Tap “Follow” on anyone posting under a name. ✨'
-                : 'No posts here yet. Be the first to light one. 🔥'}
-            </Text>
-          </View>
+          loading ? (
+            <FeedSkeleton />
+          ) : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>
+                {forYou
+                  ? 'Follow people to fill your Following feed. Tap “Follow” on anyone posting under a name. ✨'
+                  : 'No posts here yet. Be the first to light one. 🔥'}
+              </Text>
+            </View>
+          )
         }
       />
 
