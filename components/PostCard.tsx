@@ -22,6 +22,13 @@ export function PostCard({ id }: { id: string }) {
 
   const openDetail = () => router.push({ pathname: '/post/[id]', params: { id } });
 
+  // Short, single-paragraph posts read as a pull-quote: bigger serif, more air.
+  // Kept deliberately terse (a punchy line, not a paragraph) so the treatment
+  // stays the exception and breaks up the monotony of a uniform feed.
+  const isPullQuote = post.body.length <= 80 && !post.body.includes('\n');
+  // A subtle warm tint on posts you've already reacted to — a quiet "you were here".
+  const reacted = Object.values(post.myReactions).some(Boolean);
+
   // Report/block is only meaningful for other people's posts.
   const canModerate = !post.mine && !!post.authorUid;
   // You can follow another person's named identity (not your own, not anonymous).
@@ -35,7 +42,7 @@ export function PostCard({ id }: { id: string }) {
     });
 
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={openDetail} style={styles.card}>
+    <TouchableOpacity activeOpacity={0.85} onPress={openDetail} style={[styles.card, reacted && styles.cardReacted]}>
       <View style={styles.head}>
         <View style={styles.headMain}>
           <AuthorRow identity={post.author} time={post.createdAt} avatarSize={24} />
@@ -47,7 +54,9 @@ export function PostCard({ id }: { id: string }) {
           </TouchableOpacity>
         )}
       </View>
-      <Text style={styles.body}>{post.body}</Text>
+      <Text serif={isPullQuote} style={isPullQuote ? styles.bodyQuote : styles.body}>
+        {post.body}
+      </Text>
       <ReactionRow post={post} onReply={openDetail} />
     </TouchableOpacity>
   );
@@ -61,6 +70,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
     padding: 16,
   },
+  // Warm-tinted variant for posts the current user has reacted to.
+  cardReacted: {
+    backgroundColor: '#1e140d',
+    borderColor: 'rgba(240,130,74,0.22)',
+  },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headMain: { flex: 1 },
   menuBtn: { paddingLeft: 2 },
@@ -69,5 +83,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     marginTop: 9,
+  },
+  // Pull-quote treatment for short posts: larger serif with more line height.
+  bodyQuote: {
+    color: '#f3e7dd',
+    fontSize: 20,
+    lineHeight: 29,
+    marginTop: 11,
   },
 });
