@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from '@/components/Text';
+import { ReactionButton } from '@/components/ReactionButton';
 import { REACTIONS } from '@/lib/reactions';
 import { usePosts, type Post } from '@/store/PostsContext';
 
@@ -15,23 +16,19 @@ export function ReactionRow({ post, onReply }: { post: Post; onReply?: () => voi
     <View style={styles.row}>
       {REACTIONS.map((r) => {
         const count = post.reactions[r.id] ?? 0;
-        const mine = post.myReactions[r.id];
         return (
-          <TouchableOpacity
+          <ReactionButton
             key={r.id}
-            onPress={() => toggleReaction(post.id, r.id)}
-            hitSlop={6}
-            style={styles.item}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.count, mine && { color: r.color }]}>
-              {r.emoji}
-              {count > 0 ? ` ${count}` : ''}
-            </Text>
-          </TouchableOpacity>
+            emoji={r.emoji}
+            label={count > 0 ? String(count) : ''}
+            active={post.myReactions[r.id]}
+            activeColor={r.color}
+            onToggle={() => toggleReaction(post.id, r.id)}
+            textStyle={styles.count}
+          />
         );
       })}
-      <TouchableOpacity onPress={onReply} hitSlop={6} style={styles.item} activeOpacity={0.7}>
+      <TouchableOpacity onPress={onReply} hitSlop={6} activeOpacity={0.7}>
         <Text style={styles.count}>💬 {post.replies.length}</Text>
       </TouchableOpacity>
     </View>
@@ -40,6 +37,5 @@ export function ReactionRow({ post, onReply }: { post: Post; onReply?: () => voi
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 12 },
-  item: {},
   count: { color: '#9a8a80', fontSize: 13 },
 });
