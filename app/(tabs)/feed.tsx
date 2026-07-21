@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, FlatList, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import { Text } from '@/components/Text';
 import { EmberLogo } from '@/components/EmberLogo';
 import { TagChip } from '@/components/TagChip';
 import { PostCard } from '@/components/PostCard';
+import { FeedSkeleton } from '@/components/PostCardSkeleton';
 import { FeedHearth } from '@/components/FeedHearth';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, TAG_ORDER, type TagId } from '@/store/PostsContext';
@@ -19,10 +20,18 @@ import { feedBackdrop } from '@/lib/timeTheme';
 export default function FeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { postsByTag, activeTag, setActiveTag, forYou, setForYou, forYouPosts } = usePosts();
+  const { postsByTag, activeTag, setActiveTag, forYou, setForYou, forYouPosts, loading, refresh } = usePosts();
   const { session, joinCircle } = useUser();
 
   const posts = forYou ? forYouPosts() : postsByTag(activeTag);
+
+  // Pull-to-refresh. Data is live, so this is mostly a tactile confirmation.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
   const streak = session?.streak ?? 0;
   const greeting = emberGreeting(firstNameFromHandle(session?.handle));
   // Background warmth shifts with the hour — deepest and coziest late at night.
@@ -116,17 +125,30 @@ export default function FeedScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={forYou ? null : <FeedHearth />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Ember.ember}
+            colors={[Ember.ember]}
+            progressBackgroundColor={Ember.surface}
+          />
+        }
+        ListHeaderComponent={forYou || loading ? null : <FeedHearth />}
         renderItem={({ item }) => <PostCard id={item.id} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              {forYou
-                ? 'Follow people to fill your Following feed. Tap “Follow” on anyone posting under a name. ✨'
-                : 'No posts here yet. Be the first to light one. 🔥'}
-            </Text>
-          </View>
+          loading ? (
+            <FeedSkeleton />
+          ) : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>
+                {forYou
+                  ? 'Follow people to fill your Following feed. Tap “Follow” on anyone posting under a name. ✨'
+                  : 'No posts here yet. Be the first to light one. 🔥'}
+              </Text>
+            </View>
+          )
         }
       />
 
