@@ -275,6 +275,11 @@ type PostsContextType = {
   /** Whether the feed is showing the personalized "For you" view. */
   forYou: boolean;
   setForYou: (on: boolean) => void;
+  /** True until the first posts snapshot has come back — drives loading skeletons. */
+  loading: boolean;
+  /** Pull-to-refresh hook. The feed is a live subscription, so this just
+   *  confirms freshness with a brief beat so the spinner feels responsive. */
+  refresh: () => Promise<void>;
   getPost: (id: string) => Post | undefined;
   postsByTag: (tag: TagId) => Post[];
   /** Named posts from the people you follow (newest first). */
@@ -320,6 +325,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [followingHandles, setFollowingHandles] = useState<Set<string>>(new Set());
   const [activeTag, setActiveTagState] = useState<TagId>('venting');
   const [forYou, setForYou] = useState(false);
+  const [loading, setLoading] = useState(true);
   const seededRef = useRef(false);
 
   // Selecting a community tag always leaves the "For you" view.
@@ -332,23 +338,34 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (!uid) {
       setRawPosts([]);
+      setLoading(false);
       return;
     }
+    setLoading(true);
     const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
         setRawPosts(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredPost, 'id'>) })));
+        setLoading(false);
         // Seed once, only against a confirmed-empty (server, not cached) collection.
         if (!snap.metadata.fromCache && snap.empty && !seededRef.current) {
           seededRef.current = true;
           seedPosts(uid).catch((e) => console.warn('Failed to seed posts:', e));
         }
       },
-      (error) => console.warn('Posts listener error:', error)
+      (error) => {
+        console.warn('Posts listener error:', error);
+        setLoading(false);
+      }
     );
     return unsubscribe;
   }, [uid]);
+
+  // The feed is a live Firestore subscription, so there's nothing to re-fetch on
+  // pull-to-refresh; resolve after a short beat purely so the spinner reads as
+  // deliberate rather than snapping shut instantly.
+  const refresh = () => new Promise<void>((resolve) => setTimeout(resolve, 800));
 
   // Live membership deltas per community. Each `communities/{tag}` doc holds a
   // net joins-minus-leaves count layered on top of the seeded baseline in
@@ -655,6 +672,8 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setActiveTag,
         forYou,
         setForYou,
+        loading,
+        refresh,
         getPost,
         postsByTag,
         forYouPosts,
