@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
+import { EmptyState } from '@/components/EmptyState';
 import { PresetAvatar } from '@/components/Avatar';
 import { Ember, Radius } from '@/constants/theme';
 import { usePosts, type Post } from '@/store/PostsContext';
@@ -139,9 +140,19 @@ export default function ProfileScreen() {
           <MyPostCard post={item} onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.id } })} />
         )}
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            {tab === 'saved' ? 'Nothing saved yet. Tap “save” on a post that stays with you.' : 'No posts yet.'}
-          </Text>
+          tab === 'saved' ? (
+            <EmptyState
+              glyph="🔖"
+              title="Nothing saved yet"
+              body="Tap “save” on a post that stays with you, and it’ll be waiting here."
+            />
+          ) : (
+            <EmptyState
+              glyph="🔥"
+              title="No embers yet"
+              body="The posts you share will gather here — a small record of showing up."
+            />
+          )
         }
       />
     </View>
@@ -213,5 +224,4 @@ const styles = StyleSheet.create({
   postTag: { color: Ember.ember, fontSize: 11, fontWeight: '700' },
   postShared: { color: Ember.textMutedDeep, fontSize: 11 },
   postBody: { color: Ember.textBody, fontSize: 13, lineHeight: 20 },
-  empty: { color: Ember.textMuted, fontSize: 14, lineHeight: 22, textAlign: 'center', paddingTop: 40, paddingHorizontal: 20 },
 });

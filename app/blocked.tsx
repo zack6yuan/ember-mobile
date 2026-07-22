@@ -5,6 +5,7 @@ import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
+import { EmptyState } from '@/components/EmptyState';
 import { Ember, Radius } from '@/constants/theme';
 import { usePosts } from '@/store/PostsContext';
 
@@ -32,13 +33,12 @@ export default function BlockedScreen() {
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🛡️</Text>
-            <Text style={styles.emptyBody}>
-              You haven’t blocked anyone. If someone’s posts or replies aren’t for you, block them and they’ll
-              disappear from your view.
-            </Text>
-          </View>
+          <EmptyState
+            fill
+            glyph="🛡️"
+            title="Your space is clear"
+            body="You haven’t blocked anyone. If someone’s posts or replies aren’t for you, block them and they’ll disappear from your view."
+          />
         }
         renderItem={({ item }) => (
           <View style={styles.row}>
@@ -88,7 +88,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   unblockLabel: { color: Ember.textSecondary, fontSize: 13, fontWeight: '700' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30, gap: 12 },
-  emptyEmoji: { fontSize: 34 },
-  emptyBody: { color: Ember.textMuted, fontSize: 14, lineHeight: 21, textAlign: 'center' },
 });

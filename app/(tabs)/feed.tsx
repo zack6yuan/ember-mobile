@@ -11,6 +11,7 @@ import { TagChip } from '@/components/TagChip';
 import { PostCard } from '@/components/PostCard';
 import { FeedSkeleton } from '@/components/PostCardSkeleton';
 import { FeedHearth } from '@/components/FeedHearth';
+import { EmptyState } from '@/components/EmptyState';
 import { Ember, EmberGradient, Radius } from '@/constants/theme';
 import { usePosts, TAG_ORDER, type TagId } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
@@ -140,14 +141,18 @@ export default function FeedScreen() {
         ListEmptyComponent={
           loading ? (
             <FeedSkeleton />
+          ) : forYou ? (
+            <EmptyState
+              glyph="✨"
+              title="Your Following feed"
+              body="Follow people to fill this feed — tap “Follow” on anyone posting under a name."
+            />
           ) : (
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>
-                {forYou
-                  ? 'Follow people to fill your Following feed. Tap “Follow” on anyone posting under a name. ✨'
-                  : 'No posts here yet. Be the first to light one. 🔥'}
-              </Text>
-            </View>
+            <EmptyState
+              glyph="🔥"
+              title="Nothing here yet"
+              body="Be the first to light one. Share what’s on your mind — someone out there needs to hear it."
+            />
           )
         }
       />
@@ -200,8 +205,6 @@ const styles = StyleSheet.create({
   chips: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
   chipDivider: { width: 1, height: 22, backgroundColor: Ember.borderStrong, marginHorizontal: 2 },
   list: { paddingHorizontal: 16, paddingBottom: 170 },
-  empty: { paddingTop: 80, paddingHorizontal: 24, alignItems: 'center' },
-  emptyText: { color: Ember.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 22 },
   fab: {
     position: 'absolute',
     right: 18,
