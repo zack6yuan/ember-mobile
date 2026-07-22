@@ -7,11 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/Text';
 import { EmptyState } from '@/components/EmptyState';
 import { PresetAvatar } from '@/components/Avatar';
+import { ProfileHearth } from '@/components/ProfileHearth';
+import { Milestones } from '@/components/Milestones';
 import { Ember, Radius } from '@/constants/theme';
 import { usePosts, type Post } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 import { useAuth } from '@/store/AuthContext';
-import { moodById } from '@/lib/moods';
 
 function sharedAs(post: Post): string {
   return post.author.mode === 'named' && post.author.handle
@@ -39,9 +40,18 @@ export default function ProfileScreen() {
   const { myPosts, savedPosts } = usePosts();
   const [tab, setTab] = useState<'mine' | 'saved'>('mine');
 
-  const data = tab === 'mine' ? myPosts() : savedPosts();
-  // Newest 14 check-ins, shown oldest → newest so the strip reads as a timeline.
-  const recentMoods = moods.slice(0, 14).reverse();
+  const minePosts = myPosts();
+  const data = tab === 'mine' ? minePosts : savedPosts();
+  // "People held" = total warmth your posts have received across every reaction.
+  const peopleHeld = minePosts.reduce(
+    (sum, p) => sum + Object.values(p.reactions).reduce((a, b) => a + b, 0),
+    0
+  );
+  const milestoneStats = {
+    embersShared: session?.embersShared ?? 0,
+    longestStreak: session?.longestStreak ?? 0,
+    peopleHeld,
+  };
   const handle = session?.handle ?? '';
   const initial = handle.charAt(0).toUpperCase();
 
@@ -71,12 +81,6 @@ export default function ProfileScreen() {
               Here since {session?.memberSince ?? '—'} · {session?.embersShared ?? 0} ember
               {(session?.embersShared ?? 0) === 1 ? '' : 's'} shared
             </Text>
-            {!!session && session.streak > 0 && (
-              <Text style={styles.streak}>
-                🔥 {session.streak}-day streak
-                {session.longestStreak > session.streak ? ` · longest ${session.longestStreak}` : ''}
-              </Text>
-            )}
           </View>
         </View>
         <View style={styles.actions}>
@@ -103,18 +107,14 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {recentMoods.length > 0 && (
-        <View style={styles.moodStrip}>
-          <Text style={styles.moodStripLabel}>Recent moods</Text>
-          <View style={styles.moodStripRow}>
-            {recentMoods.map((entry) => (
-              <Text key={entry.date} style={styles.moodStripEmoji}>
-                {moodById(entry.mood)?.emoji ?? '·'}
-              </Text>
-            ))}
-          </View>
-        </View>
-      )}
+      <ProfileHearth
+        streak={session?.streak ?? 0}
+        longestStreak={session?.longestStreak ?? 0}
+        embersShared={session?.embersShared ?? 0}
+        moods={moods}
+      />
+
+      <Milestones stats={milestoneStats} />
 
       <View style={styles.tabs}>
         <TouchableOpacity style={[styles.tab, tab === 'mine' && styles.tabActive]} onPress={() => setTab('mine')} activeOpacity={0.8}>
@@ -174,7 +174,6 @@ const styles = StyleSheet.create({
   },
   handle: { fontSize: 22, color: Ember.textPrimary },
   meta: { color: Ember.textMutedDeep, fontSize: 13, marginTop: 4 },
-  streak: { color: Ember.emberLight, fontSize: 13, fontWeight: '700', marginTop: 8 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
   action: {
     flexDirection: 'row',
@@ -188,26 +187,7 @@ const styles = StyleSheet.create({
     backgroundColor: Ember.surface3,
   },
   actionText: { color: Ember.textMuted, fontSize: 13, fontWeight: '600' },
-  moodStrip: {
-    backgroundColor: Ember.surface,
-    borderWidth: 1,
-    borderColor: Ember.border,
-    borderRadius: Radius.cardSmall,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginTop: 14,
-    gap: 8,
-  },
-  moodStripLabel: {
-    color: Ember.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  moodStripRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  moodStripEmoji: { fontSize: 18 },
-  tabs: { flexDirection: 'row', gap: 8, paddingVertical: 12 },
+  tabs: { flexDirection: 'row', gap: 8, paddingVertical: 12, marginTop: 4 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: Radius.segment },
   tabActive: { backgroundColor: Ember.surface3 },
   tabText: { fontSize: 13 },
