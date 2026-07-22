@@ -60,6 +60,7 @@ export type Post = {
   myReactions: Record<ReactionId, boolean>; // which ones the current user has left
   replies: Reply[];
   createdAt: string; // display string, e.g. "4m"
+  createdAtMs: number; // raw epoch ms — for recency signals (e.g. Explore's "warm right now")
   mine?: boolean; // authored by the current user (shown in their profile)
   saved?: boolean;
 };
@@ -473,6 +474,7 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               myReactions: replyMyReactions(rp.reactBy, uid),
             })),
           createdAt: timeAgo(r.createdAt),
+          createdAtMs: r.createdAt,
           mine: !!uid && r.authorUid === uid && !r.seeded,
           saved: savedIds.has(r.id),
         })),
