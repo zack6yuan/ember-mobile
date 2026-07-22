@@ -23,6 +23,7 @@ import { detectDistress } from '@/lib/crisis';
 import { displayName } from '@/lib/identity';
 import { presentModerationMenu } from '@/lib/moderation';
 import { REACTIONS, type ReactionId } from '@/lib/reactions';
+import { compactCount } from '@/lib/format';
 import { usePosts, type Reply } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 
@@ -52,7 +53,7 @@ function ReplyRow({
             <ReactionButton
               key={r.id}
               emoji={r.emoji}
-              label={count > 0 ? String(count) : ''}
+              label={count > 0 ? compactCount(count) : ''}
               active={reply.myReactions[r.id]}
               activeColor={r.color}
               onToggle={() => onReact(r.id)}
@@ -177,7 +178,7 @@ export default function PostDetailScreen() {
             <ReactionButton
               key={r.id}
               emoji={r.emoji}
-              label={count > 0 ? String(count) : r.label}
+              label={count > 0 ? compactCount(count) : r.label}
               active={mine}
               activeColor={r.color}
               onToggle={() => toggleReaction(post.id, r.id)}

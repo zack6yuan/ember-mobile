@@ -34,7 +34,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'heart',
-    emoji: '❤️',
+    emoji: '🧡',
     label: 'Heart',
     activeLabel: 'Hearted',
     color: Ember.ember,
@@ -54,7 +54,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'metoo',
-    emoji: '🤝',
+    emoji: '🙋',
     label: 'Me too',
     activeLabel: 'Me too',
     color: Ember.reactionWarm,
@@ -64,7 +64,7 @@ export const REACTIONS: ReactionDef[] = [
   },
   {
     id: 'strength',
-    emoji: '💪',
+    emoji: '✊',
     label: 'Strength',
     activeLabel: 'Strength',
     color: Ember.emberLight,
