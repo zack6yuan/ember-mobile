@@ -3,6 +3,46 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- Shared helpers ------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // An update may touch only these fields, and nothing else.
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // Body length bounds. These are deliberately looser than the ones the app
+    // enforces in lib/limits.ts (2..2000 for a post, 1..1000 for a reply):
+    // `size()` here counts bytes, so a post full of emoji can be well past its
+    // character count. The app's limits are the ones a person actually feels;
+    // these exist only to stop someone hand-rolling a megabyte write.
+    function validBody(body, min, max) {
+      return body is string && body.size() >= min && body.size() <= max;
+    }
+
+    function validTag(tag) {
+      return tag in ['venting', 'wins', 'advice', 'gratitude', 'latenight', 'lonely',
+                     'healing', 'heartbreak', 'work', 'grief', 'hope'];
+    }
+
+    // `createdAt` is client-supplied epoch ms, and the feed is ordered by it
+    // descending — so an unchecked value lets anyone future-date a post and pin
+    // it to the top of the feed permanently. The forward bound is the one that
+    // matters; the backward bound is loose enough to admit the demo seed content
+    // (which is written a few hours in the past on purpose).
+    function honestTimestamp(ms) {
+      return ms is number
+             && ms <= request.time.toMillis() + 120000      // 2 min of clock skew
+             && ms >= request.time.toMillis() - 86400000;   // 24 h
+    }
+
     // A person's profile and their private saved-posts list — owner only.
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
@@ -47,39 +87,114 @@ service cloud.firestore {
     }
 
     // Posts are readable by any signed-in user. You may only create a post as
-    // yourself, and only delete your own. Any signed-in user may react or reply,
-    // but an update may ONLY touch the reaction/reply fields — never the body,
-    // tag, author, or authorUid — so no one can edit someone else's post.
+    // yourself, and only delete your own.
     match /posts/{postId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.authorUid == request.auth.uid;
-      allow update: if request.auth != null
-                    && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['hugBy', 'heartBy', 'hugs', 'hearts',
-                                   'candleBy', 'candles', 'metooBy', 'metoos',
-                                   'strengthBy', 'strengths', 'replies']);
-      allow delete: if request.auth != null
-                    && resource.data.authorUid == request.auth.uid;
+
+      // --- Reaction integrity ---
+      // A reaction write may only add or remove the caller's *own* uid, and the
+      // running count must move exactly in step with it. Without this, any
+      // signed-in user can set `hearts` to an arbitrary number or stuff someone
+      // else's uid into the who-reacted list.
+      // `get(name, [])` covers legacy posts written before a reaction existed.
+      function togglesReaction(byName, countName) {
+        let beforeBy = resource.data.get(byName, []);
+        let afterBy = request.resource.data.get(byName, []);
+        return onlyChanges([byName, countName])
+               && afterBy.removeAll(beforeBy).hasOnly([uid()])
+               && beforeBy.removeAll(afterBy).hasOnly([uid()])
+               && request.resource.data.get(countName, 0)
+                    == resource.data.get(countName, 0) + (afterBy.size() - beforeBy.size());
+      }
+
+      // --- Reply integrity ---
+      // Replies live in an array on the post, which rules cannot iterate. Two
+      // shapes are allowed: appending exactly one reply authored by the caller,
+      // and a same-length rewrite (how a reaction on a reply is stored).
+      //
+      // KNOWN GAP: a same-length rewrite can't be checked element-by-element, so
+      // a hand-rolled client could still edit the text of an existing reply. The
+      // real fix is moving replies to a subcollection where each doc carries its
+      // own rules — tracked separately. What this does close is the worst case:
+      // replies can never be truncated or deleted wholesale by a third party.
+      function repliesBefore() { return resource.data.get('replies', []); }
+      function repliesAfter() { return request.resource.data.get('replies', []); }
+
+      // NB: the appended element is indexed inline rather than bound with `let`.
+      // Indexing past the end of the list raises an error (which denies the whole
+      // update), so the read must sit behind the `&&` that proves the list grew —
+      // binding it up front would break every same-length reply-reaction write.
+      function appendsOwnReply() {
+        return onlyChanges(['replies'])
+               && repliesAfter().size() == repliesBefore().size() + 1
+               && repliesAfter().size() <= 500
+               && repliesAfter()[repliesBefore().size()].authorUid == uid()
+               && validBody(repliesAfter()[repliesBefore().size()].body, 1, 4000)
+               && honestTimestamp(repliesAfter()[repliesBefore().size()].createdAt);
+      }
+
+      function togglesReplyReaction() {
+        return onlyChanges(['replies'])
+               && repliesBefore().size() > 0
+               && repliesAfter().size() == repliesBefore().size();
+      }
+
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+                    && request.resource.data.authorUid == uid()
+                    && validBody(request.resource.data.body, 1, 8000)
+                    && validTag(request.resource.data.tag)
+                    && honestTimestamp(request.resource.data.createdAt)
+                    && request.resource.data.replies is list
+                    && request.resource.data.keys().hasOnly([
+                         'authorUid', 'author', 'tag', 'body', 'createdAt', 'replies', 'seeded',
+                         'hugs', 'hugBy', 'hearts', 'heartBy', 'candles', 'candleBy',
+                         'metoos', 'metooBy', 'strengths', 'strengthBy'
+                       ]);
+
+      allow update: if signedIn()
+                    && (
+                      togglesReaction('hugBy', 'hugs')
+                      || togglesReaction('heartBy', 'hearts')
+                      || togglesReaction('candleBy', 'candles')
+                      || togglesReaction('metooBy', 'metoos')
+                      || togglesReaction('strengthBy', 'strengths')
+                      || togglesReplyReaction()
+                      || appendsOwnReply()
+                    );
+
+      allow delete: if signedIn() && resource.data.authorUid == uid();
     }
 
     // Live community member counts. Readable by any signed-in user; the only
-    // writable field is the `members` tally (a net join/leave delta), so no one
-    // can stash anything else on a community doc.
+    // writable field is the `members` tally, and it may only move by one per
+    // write — a join or a leave — so no one can inflate a community to millions.
     match /communities/{tag} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.keys().hasOnly(['members']);
-      allow update: if request.auth != null
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']);
+      allow read: if signedIn();
+      allow create: if signedIn()
+                    && request.resource.data.keys().hasOnly(['members'])
+                    && request.resource.data.members in [1, -1];
+      allow update: if signedIn()
+                    && onlyChanges(['members'])
+                    && request.resource.data.members is int
+                    && (request.resource.data.members == resource.data.members + 1
+                        || request.resource.data.members == resource.data.members - 1);
     }
 
     // Moderation queue. Any signed-in user may file a report as themselves, but
     // no client may read, edit, or delete reports — the queue is reviewed in the
     // Firebase console, never enumerable from the app.
     match /reports/{reportId} {
-      allow create: if request.auth != null
-                    && request.resource.data.reporterUid == request.auth.uid;
+      allow create: if signedIn()
+                    && request.resource.data.reporterUid == uid()
+                    && request.resource.data.targetType in ['post', 'reply']
+                    && request.resource.data.reason in ['harmful', 'spam', 'selfharm', 'other']
+                    && request.resource.data.status == 'open'
+                    && honestTimestamp(request.resource.data.createdAt)
+                    && request.resource.data.keys().hasOnly([
+                         'targetType', 'postId', 'replyId', 'reportedUid',
+                         'reason', 'reporterUid', 'status', 'createdAt'
+                       ]);
       allow read, update, delete: if false;
     }
   }

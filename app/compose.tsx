@@ -16,6 +16,7 @@ import { TagChip } from '@/components/TagChip';
 import { CrisisCard } from '@/components/CrisisCard';
 import { Ember, Radius } from '@/constants/theme';
 import { detectDistress } from '@/lib/crisis';
+import { charsLeft, POST_MAX } from '@/lib/limits';
 import { usePosts, TAG_ORDER, type TagId, type IdentityMode } from '@/store/PostsContext';
 import { useUser } from '@/store/UserContext';
 
@@ -30,14 +31,26 @@ export default function ComposeScreen() {
   const [tag, setTag] = useState<TagId>(activeTag);
   const [mode, setMode] = useState<IdentityMode>(session?.defaultMode ?? 'anonymous');
   const [crisisDismissed, setCrisisDismissed] = useState(false);
+  // Why a post was held back (too short, too long, still cooling down).
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
-  const canPost = body.trim().length > 0;
+  const canPost = body.trim().length > 0 && !sending;
   const showCrisis = !crisisDismissed && detectDistress(body);
+  const remaining = charsLeft(body, POST_MAX);
 
-  const submit = () => {
+  const submit = async () => {
     if (!canPost) return;
+    setSending(true);
+    setNotice(null);
     const identity = mode === 'named' ? namedIdentity : anonIdentity;
-    addPost({ body: body.trim(), tag, identity });
+    const result = await addPost({ body, tag, identity });
+    if (!result.ok) {
+      // Keep what they wrote — never make someone retype a hard thing.
+      setNotice(result.message);
+      setSending(false);
+      return;
+    }
     incrementEmbersShared();
     setActiveTag(tag);
     router.replace('/posted');
@@ -67,11 +80,20 @@ export default function ComposeScreen() {
           placeholder="Let it out. No judgment here."
           placeholderTextColor="#6f625a"
           value={body}
-          onChangeText={setBody}
+          onChangeText={(next) => {
+            setBody(next);
+            if (notice) setNotice(null);
+          }}
           multiline
           autoFocus
           textAlignVertical="top"
         />
+        {notice && <Text style={styles.notice}>{notice}</Text>}
+        {remaining !== null && (
+          <Text style={[styles.counter, remaining < 0 && styles.counterOver]}>
+            {remaining < 0 ? `${Math.abs(remaining).toLocaleString()} over` : `${remaining} left`}
+          </Text>
+        )}
       </ScrollView>
 
       {showCrisis && (
@@ -135,6 +157,15 @@ const styles = StyleSheet.create({
     fontFamily: 'HankenGrotesk_400Regular',
     minHeight: 160,
   },
+  notice: {
+    color: Ember.emberLight,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  counter: { color: Ember.textMutedDeep, fontSize: 12, marginTop: 8, alignSelf: 'flex-end' },
+  counterOver: { color: Ember.emberLight, fontWeight: '600' },
   crisisWrap: { paddingHorizontal: 20, paddingBottom: 12 },
   footer: { paddingHorizontal: 20, gap: 14 },
   label: {

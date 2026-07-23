@@ -75,6 +75,9 @@ export default function PostDetailScreen() {
   const { defaultIdentity, session } = useUser();
   const [text, setText] = useState('');
   const [crisisDismissed, setCrisisDismissed] = useState(false);
+  // Why a reply was held back (empty, too long, still cooling down).
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   const post = getPost(id);
   if (!post) return null;
@@ -109,9 +112,17 @@ export default function PostDetailScreen() {
     });
   };
 
-  const send = () => {
-    if (!text.trim()) return;
-    addReply(post.id, text.trim(), defaultIdentity);
+  const send = async () => {
+    if (sending) return;
+    setSending(true);
+    const result = await addReply(post.id, text, defaultIdentity);
+    setSending(false);
+    if (!result.ok) {
+      // Leave the text in place so nothing they wrote is lost.
+      setNotice(result.message);
+      return;
+    }
+    setNotice(null);
     setText('');
   };
 
@@ -216,13 +227,17 @@ export default function PostDetailScreen() {
       />
 
       <View style={[styles.composer, { paddingBottom: insets.bottom + 12 }]}>
+        {notice && <Text style={styles.notice}>{notice}</Text>}
         <View style={styles.inputPill}>
           <TextInput
             style={styles.input}
             placeholder="Say something kind…"
             placeholderTextColor={Ember.textMutedDeep}
             value={text}
-            onChangeText={setText}
+            onChangeText={(next) => {
+              setText(next);
+              if (notice) setNotice(null);
+            }}
             onSubmitEditing={send}
             returnKeyType="send"
           />
@@ -275,6 +290,7 @@ const styles = StyleSheet.create({
     borderTopColor: Ember.border,
     backgroundColor: Ember.bg,
   },
+  notice: { color: Ember.emberLight, fontSize: 13, lineHeight: 18, paddingBottom: 8 },
   inputPill: {
     flexDirection: 'row',
     alignItems: 'center',
