@@ -15,7 +15,9 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { checkPostBody, checkReplyBody, type CheckResult } from '@/lib/limits';
 import { reportContent, type ReportReasonId } from '@/lib/moderation';
+import { consume } from '@/lib/rateLimit';
 import { notify } from '@/lib/notifications';
 import { REACTIONS, reactionById, type ReactionId } from '@/lib/reactions';
 import { timeAgo } from '@/lib/time';
@@ -296,8 +298,11 @@ type PostsContextType = {
   /** Add/remove a warmth reaction on a reply. */
   toggleReplyReaction: (postId: string, replyId: string, reaction: ReactionId) => void;
   toggleSave: (id: string) => void;
-  addReply: (postId: string, body: string, identity: Identity) => void;
-  addPost: (input: NewPostInput) => Promise<void>;
+  /** Post a reply. Resolves `{ ok: false, message }` if content checks or rate
+   *  limits reject it, so the composer can say why without guessing. */
+  addReply: (postId: string, body: string, identity: Identity) => Promise<CheckResult>;
+  /** Share a post. Same contract as `addReply` — the caller shows the message. */
+  addPost: (input: NewPostInput) => Promise<CheckResult>;
   /** Delete one of your own posts (owner-only, enforced by Firestore rules). */
   deletePost: (id: string) => void;
   /** People the current user has blocked. */
@@ -513,11 +518,21 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
-  const toggleReaction = (id: string, reaction: ReactionId) => {
+  const toggleReaction = async (id: string, reaction: ReactionId) => {
     if (!uid) return;
     const def = reactionById(reaction);
     const raw = rawPosts.find((p) => p.id === id);
     if (!def || !raw) return;
+
+    // A burst guard for stuck taps and scripted spam. The cap is far above what
+    // a person can reach by hand, so this stays silent rather than interrupting
+    // someone mid-gesture with a warning they'd have no idea how to act on.
+    const allowed = await consume(uid, 'reaction');
+    if (!allowed.ok) {
+      console.warn('Reaction rate limit reached:', allowed.message);
+      return;
+    }
+
     const on = !asArr(field(raw, def.byField)).includes(uid);
     updateDoc(doc(db, 'posts', id), {
       [def.byField]: on ? arrayUnion(uid) : arrayRemove(uid),
@@ -563,15 +578,21 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     op.catch((e) => console.warn('Failed to toggle save:', e));
   };
 
-  const addReply = (postId: string, body: string, identity: Identity) => {
-    if (!uid) return;
+  const addReply = async (postId: string, body: string, identity: Identity): Promise<CheckResult> => {
+    if (!uid) return { ok: false, message: 'Sign in to reply.' };
+
+    const content = checkReplyBody(body);
+    if (!content.ok) return content;
+    const allowed = await consume(uid, 'reply');
+    if (!allowed.ok) return allowed;
+
     const raw = rawPosts.find((p) => p.id === postId);
     const author = cleanIdentity(identity);
     const reply: StoredReply = {
       id: `r_${Date.now()}`,
       author,
       authorUid: uid,
-      body,
+      body: body.trim(),
       createdAt: Date.now(),
     };
     updateDoc(doc(db, 'posts', postId), { replies: arrayUnion(reply) }).catch((e) =>
@@ -586,9 +607,10 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         postId,
         postBody: raw.body,
         tag: raw.tag,
-        replyBody: body,
+        replyBody: reply.body,
       });
     }
+    return { ok: true };
   };
 
   // Delete a post. The live listener drops it from local state automatically;
@@ -623,15 +645,21 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Reporting a post files it for review and hides it from the reporter right
   // away — you shouldn't have to keep looking at something you just flagged.
-  const reportPost = (postId: string, reason: ReportReasonId) => {
+  const reportPost = async (postId: string, reason: ReportReasonId) => {
     if (!uid) return;
+    // Hide it either way: even past the report cap, someone who flags a post
+    // shouldn't have to keep seeing it.
+    hidePost(postId);
+    const allowed = await consume(uid, 'report');
+    if (!allowed.ok) return;
     const raw = rawPosts.find((p) => p.id === postId);
     reportContent({ targetType: 'post', postId, reportedUid: raw?.authorUid ?? null, reason, reporterUid: uid });
-    hidePost(postId);
   };
 
-  const reportReply = (postId: string, replyId: string, reason: ReportReasonId) => {
+  const reportReply = async (postId: string, replyId: string, reason: ReportReasonId) => {
     if (!uid) return;
+    const allowed = await consume(uid, 'report');
+    if (!allowed.ok) return;
     const raw = rawPosts.find((p) => p.id === postId);
     const reply = (raw?.replies ?? []).find((r) => r.id === replyId);
     reportContent({
@@ -644,13 +672,19 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const addPost = async ({ body, tag, identity }: NewPostInput) => {
-    if (!uid) return;
+  const addPost = async ({ body, tag, identity }: NewPostInput): Promise<CheckResult> => {
+    if (!uid) return { ok: false, message: 'Sign in to share a post.' };
+
+    const content = checkPostBody(body);
+    if (!content.ok) return content;
+    const allowed = await consume(uid, 'post');
+    if (!allowed.ok) return allowed;
+
     const post: Omit<StoredPost, 'id'> = {
       authorUid: uid,
       author: cleanIdentity(identity),
       tag,
-      body,
+      body: body.trim(),
       hugs: 0,
       hearts: 0,
       hugBy: [],
@@ -660,8 +694,10 @@ export const PostsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
     try {
       await addDoc(collection(db, 'posts'), post);
+      return { ok: true };
     } catch (e) {
       console.warn('Failed to add post:', e);
+      return { ok: false, message: "That didn't send. Check your connection and try again." };
     }
   };
 
