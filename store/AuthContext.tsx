@@ -1,14 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
+  getAdditionalUserInfo,
+  GoogleAuthProvider,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signOut as fbSignOut,
   updateProfile,
   type User,
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { getGoogleIdToken, googleSignOut } from '@/lib/googleSignIn';
+import { suggestHandle } from '@/lib/handle';
 
 type AuthContextType = {
   /** The signed-in Firebase user, or null when logged out. */
@@ -17,6 +22,13 @@ type AuthContextType = {
   initializing: boolean;
   signUp: (email: string, password: string, handle: string) => Promise<User>;
   signIn: (email: string, password: string) => Promise<User>;
+  /**
+   * Native Google sign-in (issue #1). Resolves to the Firebase user plus whether
+   * this is their first sign-in — the caller provisions a profile for new users
+   * (see login/signup screens). Only available in a custom dev build; guarded by
+   * `isGoogleSignInAvailable()` at the call sites.
+   */
+  signInWithGoogle: () => Promise<{ user: User; isNewUser: boolean }>;
   signOut: () => Promise<void>;
   /** Send a password-reset email via Firebase. */
   resetPassword: (email: string) => Promise<void>;
@@ -38,6 +50,8 @@ export function authErrorMessage(error: unknown): string {
     case 'auth/wrong-password':
     case 'auth/user-not-found':
       return 'That email and password don’t match. Give it another try.';
+    case 'auth/account-exists-with-different-credential':
+      return 'You already have an account with this email. Sign in the way you did before.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Take a breath and try again in a moment.';
     case 'auth/network-request-failed':
@@ -70,12 +84,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return credential.user;
   };
 
-  const signOut = () => fbSignOut(auth);
+  const signInWithGoogle = async () => {
+    // Native Google sheet → Firebase credential exchange.
+    const idToken = await getGoogleIdToken();
+    const result = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+    const isNewUser = getAdditionalUserInfo(result)?.isNewUser ?? false;
+    // First-time Google users never typed a username. Seed the Auth displayName
+    // with a valid handle now so the profile handle is consistent no matter
+    // which path writes it first (createProfile in the screen, or UserContext's
+    // self-heal fallback, which derives the handle from displayName).
+    if (isNewUser) {
+      const seed = result.user.displayName || result.user.email?.split('@')[0] || 'friend';
+      await updateProfile(result.user, { displayName: suggestHandle(seed) });
+    }
+    return { user: result.user, isNewUser };
+  };
+
+  const signOut = async () => {
+    // Clear the native Google session too, so its account picker reappears next
+    // time; best-effort, Firebase sign-out below is authoritative.
+    await googleSignOut();
+    await fbSignOut(auth);
+  };
 
   const resetPassword = (email: string) => sendPasswordResetEmail(auth, email.trim());
 
   return (
-    <AuthContext.Provider value={{ user, initializing, signUp, signIn, signOut, resetPassword }}>
+    <AuthContext.Provider
+      value={{ user, initializing, signUp, signIn, signInWithGoogle, signOut, resetPassword }}
+    >
       {children}
     </AuthContext.Provider>
   );

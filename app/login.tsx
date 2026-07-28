@@ -15,13 +15,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Text';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { GoogleButton } from '@/components/GoogleButton';
 import { Ember, Radius } from '@/constants/theme';
 import { useAuth, authErrorMessage } from '@/store/AuthContext';
+import { useUser } from '@/store/UserContext';
+import { isGoogleSignInAvailable, isGoogleCancellation } from '@/lib/googleSignIn';
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signIn, resetPassword } = useAuth();
+  const { signIn, signInWithGoogle, resetPassword } = useAuth();
+  const { createProfile } = useUser();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +33,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const onSubmit = async () => {
@@ -46,6 +51,25 @@ export default function LoginScreen() {
     } catch (e) {
       setError(authErrorMessage(e));
       setSubmitting(false);
+    }
+  };
+
+  const onGoogle = async () => {
+    setError(null);
+    setNotice(null);
+    setGoogleSubmitting(true);
+    try {
+      const { user, isNewUser } = await signInWithGoogle();
+      // A first-time Google user needs a profile; returning users already have
+      // one. Either way the root navigator routes from here (new → onboarding,
+      // returning → feed), so we don't navigate manually.
+      if (isNewUser) {
+        await createProfile(user.uid, user.displayName || 'friend');
+      }
+    } catch (e) {
+      // Backing out of the Google sheet isn't an error worth surfacing.
+      if (!isGoogleCancellation(e)) setError(authErrorMessage(e));
+      setGoogleSubmitting(false);
     }
   };
 
@@ -163,6 +187,16 @@ export default function LoginScreen() {
           disabled={submitting}
         />
         {submitting && <ActivityIndicator color={Ember.ember} style={styles.spinner} />}
+        {isGoogleSignInAvailable() && (
+          <>
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <GoogleButton onPress={onGoogle} loading={googleSubmitting} disabled={submitting} />
+          </>
+        )}
         <TouchableOpacity onPress={() => router.replace('/signup')} hitSlop={8} style={styles.switch}>
           <Text style={styles.switchText}>
             New here? <Text style={styles.switchLink}>Create an account</Text>
@@ -210,6 +244,9 @@ const styles = StyleSheet.create({
   notice: { color: '#8fce7e', fontSize: 13, lineHeight: 19, marginTop: 16 },
   footer: { paddingHorizontal: 26, gap: 14 },
   spinner: { position: 'absolute', top: 18, right: 42 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 2 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: Ember.border },
+  dividerText: { color: Ember.textMuted, fontSize: 12, fontWeight: '600' },
   switch: { alignItems: 'center' },
   switchText: { color: Ember.textMuted, fontSize: 14 },
   switchLink: { color: Ember.ember, fontWeight: '700' },
