@@ -1,7 +1,7 @@
 import { ThemeProvider } from '@react-navigation/native';
 import { Stack, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import 'react-native-reanimated';
 import { useFonts } from 'expo-font';
 import {
@@ -20,6 +20,14 @@ import { AuthProvider, useAuth } from '@/store/AuthContext';
 import { PostsProvider } from '@/store/PostsContext';
 import { UserProvider, useUser } from '@/store/UserContext';
 import { Ember, EmberNavTheme } from '@/constants/theme';
+import {
+  addNotificationTapListener,
+  configureForegroundHandler,
+  getLaunchTapData,
+  isPushNotificationsAvailable,
+  registerForPushNotificationsAsync,
+  type PushData,
+} from '@/lib/pushNotifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,7 +42,7 @@ function isAuthArea(seg0: string | undefined): boolean {
  */
 function RootNavigator() {
   const { user, initializing } = useAuth();
-  const { session, isLoading } = useUser();
+  const { session, isLoading, registerPushToken } = useUser();
   const router = useRouter();
   const segments = useSegments();
 
@@ -64,6 +72,47 @@ function RootNavigator() {
       router.replace('/(tabs)/feed');
     }
   }, [ready, user, session, segments, router]);
+
+  // --- Push notifications (issue #10) -------------------------------------
+  // All of this is gated on isPushNotificationsAvailable() — the flag is off and
+  // hidden on web, so in Expo Go / web these effects do nothing.
+
+  // Configure how a push shows while the app is foregrounded (once).
+  useEffect(() => {
+    configureForegroundHandler();
+  }, []);
+
+  // Register this device's Expo push token once the profile is loaded, so the
+  // sender can reach it. registerPushToken no-ops without a session.
+  useEffect(() => {
+    if (!isPushNotificationsAvailable() || !session) return;
+    let active = true;
+    registerForPushNotificationsAsync().then((token) => {
+      if (active && token) registerPushToken(token);
+    });
+    return () => {
+      active = false;
+    };
+  }, [session, registerPushToken]);
+
+  // Open the post a notification points at. Warm taps arrive via the listener;
+  // a cold-launch tap is read once, and only after the navigator is ready and a
+  // user is signed in, so it isn't clobbered by the auth redirect above.
+  const launchHandled = useRef(false);
+  useEffect(() => {
+    if (!isPushNotificationsAvailable()) return;
+    const open = (data: PushData) => {
+      if (data.postId) router.push(`/post/${data.postId}`);
+    };
+    const unsubscribe = addNotificationTapListener(open);
+    if (ready && user && !launchHandled.current) {
+      launchHandled.current = true;
+      getLaunchTapData().then((data) => {
+        if (data) open(data);
+      });
+    }
+    return unsubscribe;
+  }, [ready, user, router]);
 
   return (
     <Stack

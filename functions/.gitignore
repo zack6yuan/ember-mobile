@@ -1,0 +1,4 @@
+node_modules/
+# Firebase functions logs / emulator state
+*.log
+.runtimeconfig.json

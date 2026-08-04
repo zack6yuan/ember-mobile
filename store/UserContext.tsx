@@ -98,6 +98,12 @@ type UserContextType = {
   updateProfile: (patch: { handle?: string; avatar?: string; avatarUrl?: string }) => Promise<void>;
   /** Count one more ember shared (called when the person publishes a post). */
   incrementEmbersShared: () => void;
+  /**
+   * Store this device's Expo push token on the profile so the notification
+   * sender can reach it (issue #10). Fire-and-forget; a failed write never
+   * blocks the app, and warmth still lands in-app.
+   */
+  registerPushToken: (token: string) => void;
   /** Join a community (tapping an un-joined circle in the feed filters). */
   joinCircle: (tag: TagId) => void;
   /** Leave a community you've joined (from the Circles tab). */
@@ -266,6 +272,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  // Save this device's Expo push token on the user doc (kept out of the local
+  // Session — it's device state, not profile display data). `merge` so it never
+  // clobbers the rest of the profile; last device to register wins. The Cloud
+  // Function sender reads it (Admin SDK, bypassing rules) and prunes it if Expo
+  // reports the device unregistered.
+  const registerPushToken = (token: string) => {
+    if (!session || !token) return;
+    setDoc(
+      userDocRef(session.uid),
+      { pushToken: token, pushTokenUpdatedAt: Date.now() },
+      { merge: true }
+    ).catch((e) => console.warn('Failed to register push token:', e));
+  };
+
   // Join a community: optimistic local add + a server-authoritative arrayUnion
   // (idempotent, so re-joining is a no-op both locally and remotely). The
   // membership guard also keeps the community counter from double-counting.
@@ -336,6 +356,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDefaultMode,
         updateProfile,
         incrementEmbersShared,
+        registerPushToken,
         joinCircle,
         leaveCircle,
         moods,

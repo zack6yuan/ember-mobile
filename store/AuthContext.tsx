@@ -11,9 +11,11 @@ import {
   updateProfile,
   type User,
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { getGoogleIdToken, googleSignOut } from '@/lib/googleSignIn';
 import { suggestHandle } from '@/lib/handle';
+import { isPushNotificationsAvailable } from '@/lib/pushNotifications';
 
 type AuthContextType = {
   /** The signed-in Firebase user, or null when logged out. */
@@ -101,6 +103,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    // Drop this device's push token first, while Firestore rules still allow the
+    // write (they key on the signed-in uid) — otherwise the sender would keep
+    // pushing warmth to a signed-out device (issue #10). Best-effort.
+    if (isPushNotificationsAvailable() && auth.currentUser) {
+      await setDoc(
+        doc(db, 'users', auth.currentUser.uid),
+        { pushToken: '' },
+        { merge: true }
+      ).catch((e) => console.warn('Failed to clear push token on sign-out:', e));
+    }
     // Clear the native Google session too, so its account picker reappears next
     // time; best-effort, Firebase sign-out below is authoritative.
     await googleSignOut();
