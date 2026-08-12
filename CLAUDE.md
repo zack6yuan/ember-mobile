@@ -42,6 +42,8 @@ npx -y firebase-tools deploy --only firestore:rules
 
 `app/` is the route tree (typed routes enabled). `app/_layout.tsx` is the root: it loads fonts, wires the provider stack, and `RootNavigator` performs **redirect-based auth gating** off `AuthContext` + `UserContext` — logged-out → `index` (welcome); signed-in but `!session.onboarded` → `onboarding`; otherwise → `(tabs)/feed`. The splash screen is held until auth resolves *and* the profile load has settled (succeeded or failed) so a transient profile-load failure never strands the user. `(tabs)/` holds the five main tabs; several routes (`compose`, `breathe`, `edit-profile`, `posted`) are presented as modals.
 
+**Adding a logged-out (pre-auth) route:** the auth guard redirects any logged-out visitor whose top segment isn't in `isAuthArea()` back to the welcome screen. So a new screen reachable before sign-in (e.g. `login`, `signup`, `forgot-password`) must be added to `isAuthArea()` in `app/_layout.tsx`, or it gets bounced. Screens that are also deep-linkable should guard `router.back()` with `router.canGoBack()` (falling back to an explicit route) since a cold deep-link entry has no history to pop.
+
 ### State: three nested React contexts (`store/`)
 
 Provider order is **AuthProvider → UserProvider → PostsProvider** (each depends on the ones above via `useAuth`/`useUser`):

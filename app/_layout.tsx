@@ -33,7 +33,12 @@ SplashScreen.preventAutoHideAsync();
 
 /** The route segment groups that make up the logged-out (auth) area. */
 function isAuthArea(seg0: string | undefined): boolean {
-  return seg0 === undefined || seg0 === 'login' || seg0 === 'signup';
+  return (
+    seg0 === undefined ||
+    seg0 === 'login' ||
+    seg0 === 'signup' ||
+    seg0 === 'forgot-password'
+  );
 }
 
 /**
@@ -124,6 +129,7 @@ function RootNavigator() {
       <Stack.Screen name="index" />
       <Stack.Screen name="login" />
       <Stack.Screen name="signup" />
+      <Stack.Screen name="forgot-password" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="post/[id]" />
